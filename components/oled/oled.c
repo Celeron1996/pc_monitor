@@ -19,15 +19,27 @@ static const char TAG[] = "oled";
 
 
 static spi_device_handle_t spi;
-static void oled_spi_init(void);
+static oled_err_t oled_spi_init(void);
 static void oled_gpio_init(void);
-void oled_cmd(spi_device_handle_t spi, const uint8_t cmd);
-void oled_data(spi_device_handle_t spi, const uint8_t *data, int len);
-void oled_spi_pre_transfer_callback(spi_transaction_t *t);
+static void oled_cmd(spi_device_handle_t spi, const uint8_t cmd);
+static void oled_spi_pre_transfer_callback(spi_transaction_t *t);
+static void oled_task(void *pvParameters);
 
-void oled_init(void)
+static void oled_set_dot(uint8_t row, uint8_t column, int state, void *this);
+static void oled_line(uint8_t srow, uint8_t scolumn, uint8_t erow, uint8_t ecolumn, int line_type, void *this);
+static void oled_rectangle(uint8_t srow, uint8_t scolumn, uint8_t erow, uint8_t ecolumn, int state, void *this);
+static void oled_circle(uint8_t row, uint8_t column, uint8_t r, int state, void *this);
+static void oled_clear(void *this);
+
+/**
+ * @brief oled init
+ * @return oled_err_t
+ */
+oled_err_t oled_init(oled_handler_p *oled)
 {
-    oled_spi_init();
+    if (oled_spi_init() != oled_ok)
+        return oled_err;
+
     oled_gpio_init();
 
     //Reset the display
@@ -46,7 +58,6 @@ void oled_init(void)
 	oled_cmd(spi, 0x40); //Set Display Start Line
 	oled_cmd(spi, 0x8D); //Charge Pump Setting
 	oled_cmd(spi, 0x14); //Enable charge pump during display on
-	//oled_write_byte(0x10); //Disable charge pump(RESET)
 	oled_cmd(spi, 0xA1); //Segment Remap
 	oled_cmd(spi, 0xC8); //Set COM Output Scan Direction
 	oled_cmd(spi, 0xDA); //Common pads hardware: alternative
@@ -64,26 +75,39 @@ void oled_init(void)
 	oled_cmd(spi, 0x20);////
 	oled_cmd(spi, 0x00);////
 
-    uint8_t *buffer = malloc(1024);
+    *oled = (oled_handler_p)malloc(sizeof(struct oled_handler_t));
+    if(*oled == NULL)
+        return oled_err;
     
+    (*oled)->buffer = malloc((OLED_WIDTH * OLED_HEIGHT) / 8);
+    if((*oled)->buffer == NULL)
+        return oled_err;
 
-    while (1) {
-        memset(buffer, 0xff, 1024);
-        oled_data(spi, buffer, 1024);
-        vTaskDelay(1000 / portTICK_RATE_MS);
+    (*oled)->bufsize = (OLED_WIDTH * OLED_HEIGHT) / 8;
+    (*oled)->spi = &spi;
+    (*oled)->fps = OLED_FPS_DEFAULT;
+    (*oled)->enable = true;
+    (*oled)->width = OLED_WIDTH;
+    (*oled)->height = OLED_HEIGHT;
 
-        memset(buffer, 0x00, 1024);
-        oled_data(spi, buffer, 1024);
-        vTaskDelay(1000 / portTICK_RATE_MS);
+    (*oled)->set_dot = oled_set_dot;
+    (*oled)->line = oled_line;
+    (*oled)->rectangle = oled_rectangle;
+    (*oled)->circle = oled_circle;
+    (*oled)->clear = oled_clear;
 
-        ESP_LOGI(TAG, "oled init run");        
-    }
+    if (xTaskCreate(oled_task, "oled_task", 4096, (void*)oled, 5, NULL) != pdTRUE)
+        return oled_err;
 
-
+    ESP_LOGI(TAG, "oled init ok! width = %d, height = %d\n", (*oled)->width, (*oled)->height);
+    return oled_ok;
 }
 
-
-static void oled_spi_init(void)
+/**
+ * @brief init spi driver
+ * @return oled_err_t
+ */
+static oled_err_t oled_spi_init(void)
 {
     esp_err_t ret;
     spi_bus_config_t buscfg={
@@ -92,7 +116,7 @@ static void oled_spi_init(void)
         .sclk_io_num=OLED_SPI_CLK_PIN_NUM,
         .quadwp_io_num=-1,
         .quadhd_io_num=-1,
-        .max_transfer_sz=1024
+        .max_transfer_sz=(OLED_WIDTH * OLED_HEIGHT)
     };
     spi_device_interface_config_t devcfg={
         .clock_speed_hz=1*1000*1000,           //Clock out at 5 MHz
@@ -104,11 +128,22 @@ static void oled_spi_init(void)
     //Initialize the SPI bus
     ret=spi_bus_initialize(OLED_SPI, &buscfg, OLED_SPI_DMA_CHAN);
     ESP_ERROR_CHECK(ret);
+    if(ret != ESP_OK)
+        return oled_err;
     //Attach the LCD to the SPI bus
     ret=spi_bus_add_device(OLED_SPI, &devcfg, &spi);
     ESP_ERROR_CHECK(ret);
+
+    if(ret != ESP_OK)
+        return oled_err;
+    
+    return oled_ok;
 }
 
+/**
+ * @brief init gpio
+ * 
+ */
 static void oled_gpio_init(void)
 {
     gpio_config_t io_conf;
@@ -132,7 +167,7 @@ static void oled_gpio_init(void)
 
 //This function is called (in irq context!) just before a transmission starts. It will
 //set the D/C line to the value indicated in the user field.
-void oled_spi_pre_transfer_callback(spi_transaction_t *t)
+static void oled_spi_pre_transfer_callback(spi_transaction_t *t)
 {
     int dc=(int)t->user;
     gpio_set_level(OLED_DC_PIN_NUM, dc);
@@ -145,7 +180,7 @@ void oled_spi_pre_transfer_callback(spi_transaction_t *t)
  * mode for higher speed. The overhead of interrupt transactions is more than
  * just waiting for the transaction to complete.
  */
-void oled_cmd(spi_device_handle_t spi, const uint8_t cmd)
+static void oled_cmd(spi_device_handle_t spi, const uint8_t cmd)
 {
     esp_err_t ret;
     spi_transaction_t t;
@@ -157,24 +192,207 @@ void oled_cmd(spi_device_handle_t spi, const uint8_t cmd)
     assert(ret==ESP_OK);            //Should have had no issues.
 }
 
-/* Send data to the LCD. Uses spi_device_polling_transmit, which waits until the
- * transfer is complete.
- *
- * Since data transactions are usually small, they are handled in polling
- * mode for higher speed. The overhead of interrupt transactions is more than
- * just waiting for the transaction to complete.
- */
-void oled_data(spi_device_handle_t spi, const uint8_t *data, int len)
+
+static void oled_task(void *pvParameters)
 {
+    oled_handler_p oled = *(oled_handler_p *)pvParameters;
     esp_err_t ret;
-    spi_transaction_t *rtrans;
     spi_transaction_t t;
-    if (len==0) return;             //no need to send anything
+
     memset(&t, 0, sizeof(t));       //Zero out the transaction
-    t.length=len*8;                 //Len is in bytes, transaction length is in bits.
-    t.tx_buffer=data;               //Data
+    t.length=oled->bufsize * 8;                 //Len is in bytes, transaction length is in bits.
+    t.tx_buffer=oled->buffer;               //Data
     t.user=(void*)1;                //D/C needs to be set to 1
-    ret=spi_device_queue_trans(spi, &t, portMAX_DELAY);
-    assert(ret==ESP_OK);            //Should have had no issues.
+
+    while (1) {
+        if (oled->enable) {
+            ret=spi_device_queue_trans(spi, &t, portMAX_DELAY);
+            assert(ret==ESP_OK);            //Should have had no issues.
+        }
+        vTaskDelay((1000 / oled->fps) / portTICK_RATE_MS);
+    }
 }
 
+
+/**
+  * @brief  打点函数，点亮或熄灭某像素点
+  * @param  row     :行坐标
+  *	@param  column  :列坐标
+  *	@param  state   :点亮或熄灭
+  *	    #1	:点亮
+  *	    #0	:熄灭
+  * @param  this  :this
+  * @return NULL
+  */
+static void oled_set_dot(uint8_t row, uint8_t column, int state, void *this)
+{
+    oled_handler_p oled = (oled_handler_p)this;
+	uint8_t row_int = row	/	8;	/*整数*/
+	uint8_t row_rem = row	%	8;	/*余数*/
+    uint8_t *p_temp = oled->buffer + (row_int * oled->width) + column;
+
+    if( (row >= oled->height) || (column >= oled->width)) {
+        while (1) {
+            ESP_LOGE(TAG, "error! row = %d, colum = %d, oled->height = %d, oled->width = %d", row, column, oled->height, oled->width);
+            vTaskDelay(1000 / portTICK_RATE_MS);
+        }
+    }
+
+	if(state == 1)
+	{
+		*p_temp |= (0x01 << row_rem);
+	}
+	else
+	{
+		*p_temp &= (~(0x01 << row_rem));
+	}
+}
+
+
+/**
+  * @brief  画线
+  * @param  srow					:开始行坐标
+  *	@param	scolumn				:开始列坐标
+  * @param  erow					:结束行坐标
+  *	@param	ecolumn				:结束列坐标
+  *	@param	line_type			:画线类型
+  *						#1	:画线，点亮像素点
+  *						#0	:画清除线，熄灭像素点
+  * @param  this
+  * @return NULL
+  */
+static void oled_line(uint8_t srow, uint8_t scolumn, uint8_t erow, uint8_t ecolumn, int line_type, void *this)
+{
+  int8_t dx, dy;
+  int8_t inc_x, inc_y;
+  int16_t  xerr = 0, yerr = 0;
+  uint8_t i, ds;
+
+  dx = erow - srow;
+  dy = ecolumn - scolumn;
+
+  if(dx > 0)
+  {
+  	inc_x = 1;
+  }
+  else
+  {
+    if(dx == 0)
+    {
+    	inc_x = 0;
+    }
+    else
+    {
+    	inc_x = -1;
+    	dx = -dx;
+    }
+  }
+
+  if(dy > 0)
+  {
+  	inc_y = 1;
+  }
+  else
+  {
+    if(dy == 0)
+    {
+    	inc_y = 0;
+    }
+    else
+    {
+    	inc_y = -1;
+    	dy = -dy;
+    }
+  }
+
+  if(dx > dy)
+  {
+  	ds = dx;
+  }
+  else
+  {
+  	ds = dy;
+  }
+
+  for(i = 0; i <= ds+1; i++)
+  {
+    oled_set_dot(srow, scolumn, line_type, this);
+    xerr += dx;
+    yerr += dy;
+    if(xerr > ds)
+    {
+      xerr -= ds;
+      srow   += inc_x;
+    }
+    if(yerr > ds)
+    {
+      yerr -= ds;
+      scolumn   += inc_y;
+    }
+  }
+}
+
+/**
+  * @brief  画矩形
+  * @param  srow					:开始行坐标
+  *	@param	scolumn				:开始列坐标
+  * @param  erow					:结束行坐标
+  *	@param	ecolumn				:结束列坐标
+  * @param  this
+  * @return NULL
+  */
+static void oled_rectangle(uint8_t srow, uint8_t scolumn, uint8_t erow, uint8_t ecolumn, int state, void *this)
+{
+	oled_line(srow, scolumn, erow, scolumn, state, this);
+	oled_line(srow, scolumn, srow, ecolumn, state, this);
+	oled_line(erow, scolumn, erow, ecolumn, state, this);
+	oled_line(srow, ecolumn, erow, ecolumn, state, this);
+}
+
+
+
+/**
+  * @brief  画圆
+  * @param  row						:圆点行坐标
+  *	@param	column				:圆点列坐标
+  * @param  this
+  * @return NULL
+  */
+static void oled_circle(uint8_t row, uint8_t column, uint8_t r, int state, void *this)
+{
+	unsigned char dx, dy = r;
+
+	for(dx = 0; dx <= r; dx++)
+	{
+		while((r * r + 1 - dx * dx) < (dy * dy))
+		{
+			dy--;
+		}
+		oled_set_dot(row + dx, column - dy, state, this);
+		oled_set_dot(row - dx, column - dy, state, this);
+		oled_set_dot(row - dx, column + dy, state, this);
+		oled_set_dot(row + dx, column + dy, state, this);
+
+		oled_set_dot(row + dy, column - dx, state, this);
+		oled_set_dot(row - dy, column - dx, state, this);
+		oled_set_dot(row - dy, column + dx, state, this);
+		oled_set_dot(row + dy, column + dx, state, this);
+	}
+}
+
+/**
+  * @brief  清除图形缓存
+  * @param  this
+  * @return NULL
+  */
+static void oled_clear(void *this)
+{
+    oled_handler_p oled = (oled_handler_p)this;
+	uint16_t i = oled->bufsize;
+	uint8_t *p = oled->buffer;
+
+	while(i--)
+	{
+		*p++ = 0;
+	}
+}
