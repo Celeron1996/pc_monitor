@@ -38,6 +38,7 @@ struct oled_handler_t {
     void (*rectangle)(uint8_t srow, uint8_t scolumn, uint8_t erow, uint8_t ecolumn, int state, void *this);
     void (*circle)(uint8_t row, uint8_t column, uint8_t r, int state, void *this);
     void (*clear)(void *this);
+    void (*printf)(uint8_t srow, uint8_t scolumn, int inverse, void *this, const char *p_str);
 };
 
 typedef struct oled_handler_t * oled_handler_p;

@@ -8,14 +8,9 @@
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include "oled.h"
+#include "font.h"
 
 static const char TAG[] = "oled";
-
-
-
-
-
-
 
 
 static spi_device_handle_t spi;
@@ -30,6 +25,7 @@ static void oled_line(uint8_t srow, uint8_t scolumn, uint8_t erow, uint8_t ecolu
 static void oled_rectangle(uint8_t srow, uint8_t scolumn, uint8_t erow, uint8_t ecolumn, int state, void *this);
 static void oled_circle(uint8_t row, uint8_t column, uint8_t r, int state, void *this);
 static void oled_clear(void *this);
+static void oled_printf(uint8_t srow, uint8_t scolumn, int inverse, void *this, const char *p_str);
 
 /**
  * @brief oled init
@@ -37,16 +33,16 @@ static void oled_clear(void *this);
  */
 oled_err_t oled_init(oled_handler_p *oled)
 {
-    if (oled_spi_init() != oled_ok)
-        return oled_err;
+  if (oled_spi_init() != oled_ok)
+      return oled_err;
 
-    oled_gpio_init();
+  oled_gpio_init();
 
-    //Reset the display
-    gpio_set_level(OLED_RS_PIN_NUM, 0);
-    vTaskDelay(100 / portTICK_RATE_MS);
-    gpio_set_level(OLED_RS_PIN_NUM, 1);
-    vTaskDelay(100 / portTICK_RATE_MS);
+  //Reset the display
+  gpio_set_level(OLED_RS_PIN_NUM, 0);
+  vTaskDelay(100 / portTICK_RATE_MS);
+  gpio_set_level(OLED_RS_PIN_NUM, 1);
+  vTaskDelay(100 / portTICK_RATE_MS);
 
 	oled_cmd(spi, 0xAE); //Set Display Off
 	oled_cmd(spi, 0xD5); //Display divide ratio/osc. freq. mode
@@ -95,6 +91,7 @@ oled_err_t oled_init(oled_handler_p *oled)
     (*oled)->rectangle = oled_rectangle;
     (*oled)->circle = oled_circle;
     (*oled)->clear = oled_clear;
+    (*oled)->printf = oled_printf;
 
     if (xTaskCreate(oled_task, "oled_task", 4096, (void*)oled, 5, NULL) != pdTRUE)
         return oled_err;
@@ -192,7 +189,12 @@ static void oled_cmd(spi_device_handle_t spi, const uint8_t cmd)
     assert(ret==ESP_OK);            //Should have had no issues.
 }
 
-
+/**
+ * @brief oled freertos task
+ * @param pvParameters
+ * @return  NULL
+ * 
+ */
 static void oled_task(void *pvParameters)
 {
     oled_handler_p oled = *(oled_handler_p *)pvParameters;
@@ -226,19 +228,17 @@ static void oled_task(void *pvParameters)
   */
 static void oled_set_dot(uint8_t row, uint8_t column, int state, void *this)
 {
-    oled_handler_p oled = (oled_handler_p)this;
-	uint8_t row_int = row	/	8;	/*整数*/
-	uint8_t row_rem = row	%	8;	/*余数*/
-    uint8_t *p_temp = oled->buffer + (row_int * oled->width) + column;
+  oled_handler_p oled = (oled_handler_p)this;
+  uint8_t row_int = row	/	8;	/*整数*/
+  uint8_t row_rem = row	%	8;	/*余数*/
+  uint8_t *p_temp = oled->buffer + (row_int * oled->width) + column;
 
-    if( (row >= oled->height) || (column >= oled->width)) {
-        while (1) {
-            ESP_LOGE(TAG, "error! row = %d, colum = %d, oled->height = %d, oled->width = %d", row, column, oled->height, oled->width);
-            vTaskDelay(1000 / portTICK_RATE_MS);
-        }
-    }
+  if( (row >= oled->height) || (column >= oled->width)) {
+      ESP_LOGE(TAG, "value overflow! row = %d, colum = %d", row, column);
+      return;
+  }
 
-	if(state == 1)
+	if(state)
 	{
 		*p_temp |= (0x01 << row_rem);
 	}
@@ -394,5 +394,55 @@ static void oled_clear(void *this)
 	while(i--)
 	{
 		*p++ = 0;
+	}
+}
+
+
+/**
+  * @brief  显示字符
+  * @param  srow					:字符左上角行坐标
+  *	@param	scolumn				:字符左上角列坐标
+  *	@param	inverse				:是否反色显示
+  *						#1	:反色
+  *						#0	:不反色
+  * @param  this
+  *	@param	p_str					:字符指针
+  * @return NULL
+  */
+static void oled_printf(uint8_t srow, uint8_t scolumn, int inverse, void *this, const char *p_str)
+{
+	uint8_t x,y;
+	uint8_t temp;
+  oled_handler_p oled = (oled_handler_p)this;
+
+	while(*p_str != '\0')
+	{
+		for(x = 0; x < 16; x++)
+		{
+			temp = font_ascii_8_16[(*p_str)*16 + x];
+			for(y = 0; y < 8; y++)
+			{
+				if(temp & 0x80)
+				{
+          oled_set_dot(srow + x, scolumn + y, !inverse, this);
+				}
+				else
+				{
+					oled_set_dot(srow + x, scolumn + y, inverse, this);
+				}
+				temp <<= 1;
+			}
+		}
+		p_str++;
+    scolumn += 8;
+    if((scolumn + 8) > oled->width)
+    {
+      scolumn = 0;
+      srow += 16;
+      if((srow + 16) > oled->height)
+      {
+        return;
+      }
+    }
 	}
 }
