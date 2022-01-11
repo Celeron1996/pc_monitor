@@ -14,6 +14,7 @@ static const char TAG[] = "oled";
 
 
 static spi_device_handle_t spi;
+static oled_handler_p _oled = NULL;
 static oled_err_t oled_spi_init(void);
 static void oled_gpio_init(void);
 static void oled_cmd(spi_device_handle_t spi, const uint8_t cmd);
@@ -31,7 +32,7 @@ static void oled_printf(uint8_t srow, uint8_t scolumn, int inverse, void *this, 
  * @brief oled init
  * @return oled_err_t
  */
-oled_err_t oled_init(oled_handler_p *oled)
+oled_err_t oled_init(void)
 {
   if (oled_spi_init() != oled_ok)
       return oled_err;
@@ -71,33 +72,52 @@ oled_err_t oled_init(oled_handler_p *oled)
 	oled_cmd(spi, 0x20);////
 	oled_cmd(spi, 0x00);////
 
-    *oled = (oled_handler_p)malloc(sizeof(struct oled_handler_t));
-    if(*oled == NULL)
+    _oled = (oled_handler_p)malloc(sizeof(struct oled_handler_t));
+    if(_oled == NULL)
         return oled_err;
     
-    (*oled)->buffer = malloc((OLED_WIDTH * OLED_HEIGHT) / 8);
-    if((*oled)->buffer == NULL)
-        return oled_err;
+    _oled->buffer = malloc((OLED_WIDTH * OLED_HEIGHT) / 8);
+    if((_oled)->buffer == NULL)
+    {
+      free(_oled);
+      _oled = NULL;
+      return oled_err;
+    }
 
-    (*oled)->bufsize = (OLED_WIDTH * OLED_HEIGHT) / 8;
-    (*oled)->spi = &spi;
-    (*oled)->fps = OLED_FPS_DEFAULT;
-    (*oled)->enable = true;
-    (*oled)->width = OLED_WIDTH;
-    (*oled)->height = OLED_HEIGHT;
+    _oled->bufsize = (OLED_WIDTH * OLED_HEIGHT) / 8;
+    _oled->spi = &spi;
+    _oled->fps = OLED_FPS_DEFAULT;
+    _oled->enable = true;
+    _oled->width = OLED_WIDTH;
+    _oled->height = OLED_HEIGHT;
 
-    (*oled)->set_dot = oled_set_dot;
-    (*oled)->line = oled_line;
-    (*oled)->rectangle = oled_rectangle;
-    (*oled)->circle = oled_circle;
-    (*oled)->clear = oled_clear;
-    (*oled)->printf = oled_printf;
+    _oled->set_dot = oled_set_dot;
+    _oled->line = oled_line;
+    _oled->rectangle = oled_rectangle;
+    _oled->circle = oled_circle;
+    _oled->clear = oled_clear;
+    _oled->printf = oled_printf;
 
-    if (xTaskCreate(oled_task, "oled_task", 4096, (void*)oled, 5, NULL) != pdTRUE)
-        return oled_err;
+    if (xTaskCreate(oled_task, "oled_task", 4096, (void*)_oled, 5, NULL) != pdTRUE)
+    {
+      free(_oled->buffer);
+      _oled->buffer = NULL;
+      free(_oled);
+      _oled = NULL;
+      return oled_err;
+    }
 
-    ESP_LOGI(TAG, "oled init ok! width = %d, height = %d\n", (*oled)->width, (*oled)->height);
+    ESP_LOGI(TAG, "oled init ok! width = %d, height = %d\n", _oled->width, _oled->height);
     return oled_ok;
+}
+
+/**
+ * @brief get oled instance
+ * 
+ */
+oled_handler_p oled_get_handler(void)
+{
+  return _oled;
 }
 
 /**
@@ -197,7 +217,7 @@ static void oled_cmd(spi_device_handle_t spi, const uint8_t cmd)
  */
 static void oled_task(void *pvParameters)
 {
-    oled_handler_p oled = *(oled_handler_p *)pvParameters;
+    oled_handler_p oled = (oled_handler_p)pvParameters;
     esp_err_t ret;
     spi_transaction_t t;
 

@@ -9,14 +9,19 @@
 #include "esp_log.h"
 
 #include "oled.h"
+#include "wifi_wizard.h"
 
 
 void app_main(void)
 {
 	oled_handler_p oled;
 
-	if( oled_init(&oled) != oled_ok)
+	if( oled_init() != oled_ok)
 		while(1);
+	
+	oled = oled_get_handler();
+
+	wifi_wizard_init();
 
 	int i;
 	while (1) {

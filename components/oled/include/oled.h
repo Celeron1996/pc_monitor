@@ -45,7 +45,8 @@ typedef struct oled_handler_t * oled_handler_p;
 
 
 
-oled_err_t oled_init(oled_handler_p *oled);
+oled_err_t oled_init(void);
+oled_handler_p oled_get_handler(void);
 
 
 
