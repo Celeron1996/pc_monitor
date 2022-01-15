@@ -18,6 +18,8 @@
 #include "lwip/sockets.h"
 #include <lwip/netdb.h>
 
+#include "cJSON.h"
+
 #define EXAMPLE_ESP_WIFI_SSID      "helloworld"
 #define EXAMPLE_ESP_WIFI_PASS      ""
 #define EXAMPLE_ESP_WIFI_CHANNEL   1
@@ -181,6 +183,12 @@ static void udp_server_task(void *pvParameters)
                 rx_buffer[len] = 0; // Null-terminate whatever we received and treat like a string...
                 ESP_LOGI(TAG, "Received %d bytes from %s:", len, addr_str);
                 ESP_LOGI(TAG, "%s", rx_buffer);
+                cJSON *json_root = cJSON_Parse(rx_buffer);
+                cJSON *wifi_name = cJSON_GetObjectItem(json_root, "wifi_name");
+                cJSON *wifi_pass = cJSON_GetObjectItem(json_root, "wifi_pass");
+                cJSON *ip_address = cJSON_GetObjectItem(json_root, "ip_address");
+                cJSON *port = cJSON_GetObjectItem(json_root, "port");
+                ESP_LOGI(TAG, "json{ wifi_name = %s, wifi_pass = %s, ip_address = %s, port = %d }", wifi_name->valuestring, wifi_pass->valuestring, ip_address->valuestring, port->valueint);
 
                 int err = sendto(sock, rx_buffer, len, 0, (struct sockaddr *)&source_addr, sizeof(source_addr));
                 if (err < 0) {
