@@ -31,12 +31,58 @@ static void udp_server_task(void *pvParameters);
 
 void wifi_init_softap(void);
 
+nvs_handle_t my_handle;
+
 /**
  * @brief wifi 配置向导，用于获取wifi名称、密码，并进行连接配置
  * 
  */
 void wifi_wizard_init(void)
 {
+    esp_err_t err;
+    err = nvs_open("config", NVS_READWRITE, &my_handle);
+
+    char buffer[256];
+    size_t length;
+
+    length = sizeof(buffer);
+    err = nvs_get_str(my_handle, "wifi_name", buffer, &length);
+    if(err == ESP_OK)
+        ESP_LOGI(TAG, "//////////wifi name = %s", buffer);
+    else
+        ESP_LOGE(TAG, "xxxxxx      WIFI NAME ERROR, err = %d", err);
+
+    length = sizeof(buffer);
+    err = nvs_get_str(my_handle, "wifi_pass", buffer, &length);
+    if(err == ESP_OK)
+        ESP_LOGI(TAG, "/////////wifi pass = %s", buffer);
+    else
+        ESP_LOGE(TAG, "xxxxxxx    WIFI PASS ERROR, err = %d", err);
+
+    length = sizeof(buffer);
+    err = nvs_get_str(my_handle, "ip_address", buffer, &length);
+    if(err == ESP_OK)
+        ESP_LOGI(TAG, "/////////ip_address = %s", buffer);
+    else
+        ESP_LOGE(TAG, "xxxxxx      IP ERROR, err = %d", err);
+
+    length = sizeof(buffer);
+    err = nvs_get_str(my_handle, "port", buffer, &length);
+    if(err == ESP_OK)
+        ESP_LOGI(TAG, "////////port = %s", buffer);
+    else
+        ESP_LOGE(TAG, "xxxxxx      PORT ERROR, err = %d", err);
+
+    length = sizeof(buffer);
+    err = nvs_get_str(my_handle, "json", buffer, &length);
+    if(err == ESP_OK)
+        ESP_LOGI(TAG, "////////json = %s", buffer);
+    else
+        ESP_LOGE(TAG, "xxxxxx      JSON ERROR, err = %d", err);
+
+    nvs_close(my_handle);
+
+
     oled_handler_p oled;
     oled = oled_get_handler();
 
@@ -48,6 +94,8 @@ void wifi_wizard_init(void)
 
     vTaskDelay(5000 / portTICK_RATE_MS);    //后续需要换成任务通知机制
     xTaskCreate(udp_server_task, "udp_server", 4096, (void*)AF_INET, 5, NULL);
+
+    
 }
 
 /**
@@ -108,6 +156,77 @@ void wifi_init_softap(void)
              EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS, EXAMPLE_ESP_WIFI_CHANNEL);
 }
 
+// void wifi_init_sta(void)
+// {
+//     s_wifi_event_group = xEventGroupCreate();
+
+//     ESP_ERROR_CHECK(esp_netif_init());
+
+//     ESP_ERROR_CHECK(esp_event_loop_create_default());
+//     esp_netif_create_default_wifi_sta();
+
+//     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+//     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+//     esp_event_handler_instance_t instance_any_id;
+//     esp_event_handler_instance_t instance_got_ip;
+//     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
+//                                                         ESP_EVENT_ANY_ID,
+//                                                         &event_handler,
+//                                                         NULL,
+//                                                         &instance_any_id));
+//     ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
+//                                                         IP_EVENT_STA_GOT_IP,
+//                                                         &event_handler,
+//                                                         NULL,
+//                                                         &instance_got_ip));
+
+//     wifi_config_t wifi_config = {
+//         .sta = {
+//             .ssid = EXAMPLE_ESP_WIFI_SSID,
+//             .password = EXAMPLE_ESP_WIFI_PASS,
+//             /* Setting a password implies station will connect to all security modes including WEP/WPA.
+//              * However these modes are deprecated and not advisable to be used. Incase your Access point
+//              * doesn't support WPA2, these mode can be enabled by commenting below line */
+// 	     .threshold.authmode = WIFI_AUTH_WPA2_PSK,
+
+//             .pmf_cfg = {
+//                 .capable = true,
+//                 .required = false
+//             },
+//         },
+//     };
+//     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
+//     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config) );
+//     ESP_ERROR_CHECK(esp_wifi_start() );
+
+//     ESP_LOGI(TAG, "wifi_init_sta finished.");
+
+//     /* Waiting until either the connection is established (WIFI_CONNECTED_BIT) or connection failed for the maximum
+//      * number of re-tries (WIFI_FAIL_BIT). The bits are set by event_handler() (see above) */
+//     EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group,
+//             WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
+//             pdFALSE,
+//             pdFALSE,
+//             portMAX_DELAY);
+
+//     /* xEventGroupWaitBits() returns the bits before the call returned, hence we can test which event actually
+//      * happened. */
+//     if (bits & WIFI_CONNECTED_BIT) {
+//         ESP_LOGI(TAG, "connected to ap SSID:%s password:%s",
+//                  EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS);
+//     } else if (bits & WIFI_FAIL_BIT) {
+//         ESP_LOGI(TAG, "Failed to connect to SSID:%s, password:%s",
+//                  EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS);
+//     } else {
+//         ESP_LOGE(TAG, "UNEXPECTED EVENT");
+//     }
+
+//     /* The event will not be processed after unregister */
+//     ESP_ERROR_CHECK(esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, instance_got_ip));
+//     ESP_ERROR_CHECK(esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, instance_any_id));
+//     vEventGroupDelete(s_wifi_event_group);
+// }
 
 
 
@@ -188,8 +307,37 @@ static void udp_server_task(void *pvParameters)
                 cJSON *wifi_pass = cJSON_GetObjectItem(json_root, "wifi_pass");
                 cJSON *ip_address = cJSON_GetObjectItem(json_root, "ip_address");
                 cJSON *port = cJSON_GetObjectItem(json_root, "port");
-                ESP_LOGI(TAG, "json{ wifi_name = %s, wifi_pass = %s, ip_address = %s, port = %d }", wifi_name->valuestring, wifi_pass->valuestring, ip_address->valuestring, port->valueint);
+                
+                err = nvs_open("config", NVS_READWRITE, &my_handle);
+                if (err != ESP_OK)
+                    ESP_LOGE(TAG, "err = %d, open", err);
 
+                err = nvs_set_str(my_handle, "json", rx_buffer);
+                if (err != ESP_OK)
+                    ESP_LOGE(TAG, "err = %d, set json", err);
+
+                err = nvs_set_str(my_handle, wifi_name->string, wifi_name->valuestring);
+                if (err != ESP_OK)
+                    ESP_LOGE(TAG, "err = %d, set name", err);
+
+                nvs_set_str(my_handle, wifi_pass->string, wifi_pass->valuestring);
+                if (err != ESP_OK)
+                    ESP_LOGE(TAG, "err = %d, set pass", err);
+                nvs_set_str(my_handle, ip_address->string, ip_address->valuestring);
+                if (err != ESP_OK)
+                    ESP_LOGE(TAG, "err = %d, set ip", err);
+                nvs_set_str(my_handle, port->string, port->valuestring);
+                if (err != ESP_OK)
+                    ESP_LOGE(TAG, "err = %d, set port", err);
+                
+                nvs_set_str(my_handle, "state", "success");
+                nvs_commit(my_handle);
+                nvs_close(my_handle);
+                //ESP_LOGI(TAG, "json{ wifi_name = %s, wifi_pass = %s, ip_address = %s, port = %d }", wifi_name->valuestring, wifi_pass->valuestring, ip_address->valuestring, port->valueint);
+                ESP_LOGI(TAG, "json----%s, %s----", wifi_name->string, wifi_name->valuestring);
+                ESP_LOGI(TAG, "json----%s, %s----", wifi_pass->string, wifi_pass->valuestring);
+                ESP_LOGI(TAG, "json----%s, %s----", ip_address->string, ip_address->valuestring);
+                ESP_LOGI(TAG, "json----%s, %s----", port->string, port->valuestring);
                 int err = sendto(sock, rx_buffer, len, 0, (struct sockaddr *)&source_addr, sizeof(source_addr));
                 if (err < 0) {
                     ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
