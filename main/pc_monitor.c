@@ -17,6 +17,7 @@
 #include "lwip/err.h"
 #include "lwip/sys.h"
 
+static const char *TAG = "pc_monitor";
 
 void app_main(void)
 {
@@ -40,8 +41,9 @@ void app_main(void)
 
 	wifi_wizard_init();
 
-	int i;
+	//int i;
 	while (1) {
+		ESP_LOGI(TAG, "hello world");
 		// memset(oled->buffer, 0x00, oled->bufsize);
 		// vTaskDelay(500 / portTICK_RATE_MS);
 

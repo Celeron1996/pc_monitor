@@ -22,17 +22,30 @@
 
 #include "cJSON.h"
 
-#define EXAMPLE_ESP_WIFI_SSID      "意心公寓3楼"
-#define EXAMPLE_ESP_WIFI_PASS      "12345678"
-#define EXAMPLE_ESP_WIFI_CHANNEL   1
-#define EXAMPLE_MAX_STA_CONN       4
 
-#define WIFI_CONNECTED_BIT BIT0
-#define WIFI_FAIL_BIT      BIT1
+static uint8_t IP_ADDRESS[16]; /*host ip address*/
+static uint8_t PORT[8];        /*host http server ip port*/
 
-#define EXAMPLE_ESP_MAXIMUM_RETRY  999
+#define ESP_AP_WIFI_SSID      "PCMonitor"
+#define ESP_AP_WIFI_PASS      ""
+#define ESP_AP_WIFI_CHANNEL   1
+#define ESP_AP_MAX_STA_COUNT  1
+
+#define WIFI_CONNECTED_BIT BIT0     /*连接 ap 成功事件标志位*/
+#define WIFI_FAIL_BIT      BIT1     /*连接失败事件标志位*/
+#define WIFI_AP_OK_BIT     BIT2     /*wifi ap 模式创建成功事件标志位*/
+
+#define ESP_STA_MAXIMUM_RETRY  999  /*wifi重连次数*/
 
 static const char *TAG = "wifi_wizard";
+
+/*存储非易失性存储的字符串*/
+static const char *NVS_NAME_STR = "config";
+static const char *NVS_ACTIVE_STR = "active";
+static const char *NVS_TRUE_STR = "true";
+static const char *NVS_FALSE_STR = "false";
+static const char *NVS_JSON_STR = "json";
+
 
 /* FreeRTOS event group to signal when we are connected*/
 static EventGroupHandle_t s_wifi_event_group;
@@ -58,7 +71,9 @@ void wifi_wizard_init(void)
     char buffer[16];
     size_t length;
     oled_handler_p oled;
-    nvs_handle_t my_handle;
+    nvs_handle_t nvs_handle;
+
+    s_wifi_event_group = xEventGroupCreate();   /*事件标记组，等待连接上wifi或失败的事件*/
 
     oled = oled_get_handler();
     if(oled == NULL)
@@ -68,7 +83,7 @@ void wifi_wizard_init(void)
     }
     oled->clear(oled);
 
-    err = nvs_open("config", NVS_READWRITE, &my_handle);
+    err = nvs_open("config", NVS_READWRITE, &nvs_handle);
     if(err != ESP_OK)
     {
         ESP_LOGE(TAG, "nvs_open error, code = %d", err);
@@ -77,30 +92,28 @@ void wifi_wizard_init(void)
     }
 
     length = sizeof(buffer);
-    err = nvs_get_str(my_handle, "active", buffer, &length);
+    err = nvs_get_str(nvs_handle, NVS_ACTIVE_STR, buffer, &length);
+    nvs_close(nvs_handle);
     if(err == ESP_OK)
     {
-        ESP_LOGI(TAG, "wifi name = %s", buffer);
-    }
-    else
-    {
-        ESP_LOGE(TAG, "wifi name read error, code = %d", err);
-        oled->printf(0, 0, 0, oled, "wifi name error");
-        vTaskDelay(1000 / portTICK_RATE_MS);
-        oled->clear(oled);
-        //while(1);
-    }
-    nvs_close(my_handle);
-
-    //if (strcmp(buffer, "true") == 0)
-    if(true)
-    {
-        wifi_wizard_connect();
+        if(memcmp(buffer, NVS_TRUE_STR, strlen(NVS_TRUE_STR)) == 0)
+        //if(false)
+        {
+            /*存储的wifi是正确的，可以使用*/
+            wifi_wizard_connect();
+        }
+        else
+        {
+            /*存储的信息无效，进行配网流程*/
+            wifi_wizard_config();
+        }
     }
     else
     {
         wifi_wizard_config();
     }
+
+    vEventGroupDelete(s_wifi_event_group);
 }
 
 /**
@@ -111,7 +124,12 @@ void wifi_wizard_config(void)
 {
     wifi_init_softap();
 
-    vTaskDelay(5000 / portTICK_RATE_MS);    //后续需要换成任务通知机制
+    //vTaskDelay(500 / portTICK_RATE_MS);
+    xEventGroupWaitBits(s_wifi_event_group,
+            WIFI_AP_OK_BIT,
+            pdFALSE,
+            pdFALSE,
+            portMAX_DELAY);
     xTaskCreate(udp_server_task, "udp_server", 4096, (void*)AF_INET, 5, NULL);
 }
 
@@ -127,14 +145,21 @@ void wifi_wizard_connect(void)
 static void event_handler(void* arg, esp_event_base_t event_base,
                                     int32_t event_id, void* event_data)
 {
-    if (event_id == WIFI_EVENT_AP_STACONNECTED) {
+    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_AP_STACONNECTED)
+    {
         wifi_event_ap_staconnected_t* event = (wifi_event_ap_staconnected_t*) event_data;
         ESP_LOGI(TAG, "station "MACSTR" join, AID=%d",
                  MAC2STR(event->mac), event->aid);
-    } else if (event_id == WIFI_EVENT_AP_STADISCONNECTED) {
+    } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_AP_STADISCONNECTED)
+    {
         wifi_event_ap_stadisconnected_t* event = (wifi_event_ap_stadisconnected_t*) event_data;
         ESP_LOGI(TAG, "station "MACSTR" leave, AID=%d",
                  MAC2STR(event->mac), event->aid);
+    }
+    else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_AP_START)
+    {
+        ESP_LOGI(TAG, "wifi ap start!");
+        xEventGroupSetBits(s_wifi_event_group, WIFI_AP_OK_BIT);
     }
     else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
     {
@@ -142,11 +167,14 @@ static void event_handler(void* arg, esp_event_base_t event_base,
     }
     else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
     {
-        if (s_retry_num < EXAMPLE_ESP_MAXIMUM_RETRY) {
+        if (s_retry_num < ESP_STA_MAXIMUM_RETRY)
+        {
             esp_wifi_connect();
             s_retry_num++;
             ESP_LOGI(TAG, "retry to connect to the AP");
-        } else {
+        }
+        else
+        {
             xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
         }
         ESP_LOGI(TAG,"connect to the AP fail");
@@ -175,15 +203,15 @@ void wifi_init_softap(void)
 
     wifi_config_t wifi_config = {
         .ap = {
-            .ssid = EXAMPLE_ESP_WIFI_SSID,
-            .ssid_len = strlen(EXAMPLE_ESP_WIFI_SSID),
-            .channel = EXAMPLE_ESP_WIFI_CHANNEL,
-            .password = EXAMPLE_ESP_WIFI_PASS,
-            .max_connection = EXAMPLE_MAX_STA_CONN,
+            .ssid = ESP_AP_WIFI_SSID,
+            .ssid_len = strlen(ESP_AP_WIFI_SSID),
+            .channel = ESP_AP_WIFI_CHANNEL,
+            .password = ESP_AP_WIFI_PASS,
+            .max_connection = ESP_AP_MAX_STA_COUNT,
             .authmode = WIFI_AUTH_WPA_WPA2_PSK
         },
     };
-    if (strlen(EXAMPLE_ESP_WIFI_PASS) == 0) {
+    if (strlen(ESP_AP_WIFI_PASS) == 0) {
         wifi_config.ap.authmode = WIFI_AUTH_OPEN;
     }
 
@@ -192,12 +220,68 @@ void wifi_init_softap(void)
     ESP_ERROR_CHECK(esp_wifi_start());
 
     ESP_LOGI(TAG, "wifi_init_softap finished. SSID:%s password:%s channel:%d",
-             EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS, EXAMPLE_ESP_WIFI_CHANNEL);
+             ESP_AP_WIFI_SSID, ESP_AP_WIFI_PASS, ESP_AP_WIFI_CHANNEL);
 }
 
 void wifi_init_sta(void)
 {
-    s_wifi_event_group = xEventGroupCreate();
+    /*--------------------step1:首先，从nvs中获取wifi名称、密码，ip地址等--------------*/
+    esp_err_t err;
+    char buffer[128];
+    size_t length;
+    oled_handler_p oled;
+    nvs_handle_t nvs_handle;
+
+    /*获取oled、清屏*/
+    oled = oled_get_handler();
+    if(oled == NULL)
+    {
+        ESP_LOGE(TAG, "oled_get_handler error!");
+        while(1);
+    }
+    oled->clear(oled);
+
+    /*打开nvs*/
+    err = nvs_open(NVS_NAME_STR, NVS_READWRITE, &nvs_handle);
+    if(err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "nvs_open error, code = %d", err);
+        oled->printf(0, 0, 0, oled, "nvs_open error!!!");
+        while(1);
+    }
+
+    /*获取json*/
+    length = sizeof(buffer);
+    err = nvs_get_str(nvs_handle, NVS_JSON_STR, buffer, &length);
+    if(err == ESP_OK)
+    {
+        ESP_LOGI(TAG, "get nvs wifi json success! json = %s", buffer);
+    }
+    else
+    {
+        ESP_LOGE(TAG, "nvs active error, code = %d", err);
+        oled->printf(0, 0, 0, oled, "wifi name error");
+        err = nvs_set_str(nvs_handle, NVS_ACTIVE_STR, NVS_FALSE_STR);
+        vTaskDelay(1000 / portTICK_RATE_MS);
+        oled->clear(oled);
+        nvs_close(nvs_handle);
+        while(1);
+    }
+    nvs_close(nvs_handle);
+
+    /*------------------------step2:获取成功，解析json----------------------------------*/
+    cJSON *json_root = cJSON_Parse(buffer);
+    cJSON *json_wifi_ssid = cJSON_GetObjectItem(json_root, "wifi_ssid");
+    cJSON *json_wifi_pass = cJSON_GetObjectItem(json_root, "wifi_pass");
+    cJSON *json_ip_address = cJSON_GetObjectItem(json_root, "ip_address");
+    cJSON *json_port = cJSON_GetObjectItem(json_root, "port");
+
+    memcpy(IP_ADDRESS, json_ip_address->valuestring, strlen(json_ip_address->valuestring));
+    memcpy(PORT, json_port->valuestring, strlen(json_port->valuestring));
+    
+    ESP_LOGI(TAG, "wifi ssid:%s, wifi pass:%s, ip:%s, port:%s", json_wifi_ssid->valuestring, json_wifi_pass->valuestring, IP_ADDRESS, PORT);
+
+    /*--------------------------step3:连接wifi--------------------------------------*/
 
     esp_netif_create_default_wifi_sta();
 
@@ -219,8 +303,8 @@ void wifi_init_sta(void)
 
     wifi_config_t wifi_config = {
         .sta = {
-            .ssid = EXAMPLE_ESP_WIFI_SSID,
-            .password = EXAMPLE_ESP_WIFI_PASS,
+            //  .ssid = json_wifi_ssid->valuestring,
+            //  .password = json_wifi_pass->valuestring,
             /* Setting a password implies station will connect to all security modes including WEP/WPA.
              * However these modes are deprecated and not advisable to be used. Incase your Access point
              * doesn't support WPA2, these mode can be enabled by commenting below line */
@@ -233,6 +317,9 @@ void wifi_init_sta(void)
             },
         },
     };
+
+    memcpy(wifi_config.sta.ssid, json_wifi_ssid->valuestring, strlen(json_wifi_ssid->valuestring));
+    memcpy(wifi_config.sta.password, json_wifi_pass->valuestring, strlen(json_wifi_pass->valuestring));
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config) );
     ESP_ERROR_CHECK(esp_wifi_start() );
@@ -251,10 +338,10 @@ void wifi_init_sta(void)
      * happened. */
     if (bits & WIFI_CONNECTED_BIT) {
         ESP_LOGI(TAG, "connected to ap SSID:%s password:%s",
-                 EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS);
+                 wifi_config.sta.ssid, wifi_config.sta.password);
     } else if (bits & WIFI_FAIL_BIT) {
         ESP_LOGI(TAG, "Failed to connect to SSID:%s, password:%s",
-                 EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS);
+                 wifi_config.sta.ssid, wifi_config.sta.password);
     } else {
         ESP_LOGE(TAG, "UNEXPECTED EVENT");
     }
@@ -262,7 +349,12 @@ void wifi_init_sta(void)
     /* The event will not be processed after unregister */
     ESP_ERROR_CHECK(esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, instance_got_ip));
     ESP_ERROR_CHECK(esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, instance_any_id));
-    vEventGroupDelete(s_wifi_event_group);
+
+    // cJSON_Delete(json_port);
+    // cJSON_Delete(json_ip_address);
+    // cJSON_Delete(json_wifi_pass);
+    // cJSON_Delete(json_wifi_ssid);
+    cJSON_Delete(json_root);
 }
 
 
@@ -276,7 +368,7 @@ static void udp_server_task(void *pvParameters)
     int ip_protocol = 0;
     struct sockaddr_in6 dest_addr;
     oled_handler_p oled;
-    nvs_handle_t my_handle;
+    nvs_handle_t nvs_handle;
 
     oled = oled_get_handler();
     if (oled == NULL)
@@ -351,30 +443,26 @@ static void udp_server_task(void *pvParameters)
                 rx_buffer[len] = 0; // Null-terminate whatever we received and treat like a string...
                 ESP_LOGI(TAG, "Received %d bytes from %s:", len, addr_str);
                 ESP_LOGI(TAG, "%s", rx_buffer);
-                cJSON *json_root = cJSON_Parse(rx_buffer);
-                cJSON *wifi_name = cJSON_GetObjectItem(json_root, "wifi_name");
-                cJSON *wifi_pass = cJSON_GetObjectItem(json_root, "wifi_pass");
-                cJSON *ip_address = cJSON_GetObjectItem(json_root, "ip_address");
-                cJSON *port = cJSON_GetObjectItem(json_root, "port");
-                
-                err = nvs_open("config", NVS_READWRITE, &my_handle);
+            
+                err = nvs_open("config", NVS_READWRITE, &nvs_handle);
                 if (err != ESP_OK)
-                    ESP_LOGE(TAG, "err = %d, open", err);
+                    ESP_LOGE(TAG, "nvs open err = %d", err);
 
-                err = nvs_set_str(my_handle, "json", rx_buffer);
+                err = nvs_set_str(nvs_handle, NVS_JSON_STR, rx_buffer);
                 if (err != ESP_OK)
-                    ESP_LOGE(TAG, "err = %d, set json", err);
-                err = nvs_set_str(my_handle, "active", "true");
+                    ESP_LOGE(TAG, "nvs set json err = %d", err);
+
+                err = nvs_set_str(nvs_handle, NVS_ACTIVE_STR, NVS_TRUE_STR);
                 if(err != ESP_OK)
-                    ESP_LOGE(TAG, "err = %d, set active", err);
-                nvs_commit(my_handle);
-                nvs_close(my_handle);
-                ESP_LOGI(TAG, "----%s, %s----", wifi_name->string, wifi_name->valuestring);
-                ESP_LOGI(TAG, "----%s, %s----", wifi_pass->string, wifi_pass->valuestring);
-                ESP_LOGI(TAG, "----%s, %s----", ip_address->string, ip_address->valuestring);
-                ESP_LOGI(TAG, "----%s, %s----", port->string, port->valuestring);
+                    ESP_LOGE(TAG, "nvs set active err = %d", err);
+                nvs_commit(nvs_handle);
+                nvs_close(nvs_handle);
 
                 oled->printf(0, 0, 0, oled, "wifi config ok!");
+                ESP_LOGI(TAG, "get json success, reboot now!");
+
+                vTaskDelay(2000 / portTICK_RATE_MS);
+                esp_restart();
             }
         }
 
