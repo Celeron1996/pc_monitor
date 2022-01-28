@@ -23,8 +23,7 @@
 #include "cJSON.h"
 
 
-static uint8_t IP_ADDRESS[16]; /*host ip address*/
-static uint8_t PORT[8];        /*host http server ip port*/
+static char URL[64] = {0};
 
 #define ESP_AP_WIFI_SSID      "PCMonitor"
 #define ESP_AP_WIFI_PASS      ""
@@ -35,7 +34,7 @@ static uint8_t PORT[8];        /*host http server ip port*/
 #define WIFI_FAIL_BIT      BIT1     /*连接失败事件标志位*/
 #define WIFI_AP_OK_BIT     BIT2     /*wifi ap 模式创建成功事件标志位*/
 
-#define ESP_STA_MAXIMUM_RETRY  999  /*wifi重连次数*/
+#define ESP_STA_MAXIMUM_RETRY  16  /*wifi重连次数*/
 
 static const char *TAG = "wifi_wizard";
 
@@ -110,6 +109,7 @@ void wifi_wizard_init(void)
     }
     else
     {
+        /*可能是没有建立此标签，第一次使用？重新配置一遍*/
         wifi_wizard_config();
     }
 
@@ -167,16 +167,17 @@ static void event_handler(void* arg, esp_event_base_t event_base,
     }
     else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
     {
-        if (s_retry_num < ESP_STA_MAXIMUM_RETRY)
-        {
-            esp_wifi_connect();
-            s_retry_num++;
-            ESP_LOGI(TAG, "retry to connect to the AP");
-        }
-        else
-        {
-            xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
-        }
+        // if (s_retry_num < ESP_STA_MAXIMUM_RETRY)
+        // {
+        //     esp_wifi_connect();
+        //     s_retry_num++;
+        //     ESP_LOGI(TAG, "retry to connect to the AP");
+        // }
+        // else
+        // {
+        //     xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
+        // }
+        esp_wifi_connect();
         ESP_LOGI(TAG,"connect to the AP fail");
     }
     else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
@@ -260,14 +261,8 @@ void wifi_init_sta(void)
     else
     {
         ESP_LOGE(TAG, "nvs active error, code = %d", err);
-        oled->printf(0, 0, 0, oled, "wifi name error");
-        err = nvs_set_str(nvs_handle, NVS_ACTIVE_STR, NVS_FALSE_STR);
-        vTaskDelay(1000 / portTICK_RATE_MS);
-        oled->clear(oled);
-        nvs_close(nvs_handle);
-        while(1);
+        goto flag_err;
     }
-    nvs_close(nvs_handle);
 
     /*------------------------step2:获取成功，解析json----------------------------------*/
     cJSON *json_root = cJSON_Parse(buffer);
@@ -276,10 +271,17 @@ void wifi_init_sta(void)
     cJSON *json_ip_address = cJSON_GetObjectItem(json_root, "ip_address");
     cJSON *json_port = cJSON_GetObjectItem(json_root, "port");
 
-    memcpy(IP_ADDRESS, json_ip_address->valuestring, strlen(json_ip_address->valuestring));
-    memcpy(PORT, json_port->valuestring, strlen(json_port->valuestring));
-    
-    ESP_LOGI(TAG, "wifi ssid:%s, wifi pass:%s, ip:%s, port:%s", json_wifi_ssid->valuestring, json_wifi_pass->valuestring, IP_ADDRESS, PORT);
+    ESP_LOGI(TAG, "wifi ssid:%s, wifi pass:%s, ip:%s, port:%s", 
+            json_wifi_ssid->valuestring,
+            json_wifi_pass->valuestring,
+            json_ip_address->valuestring, json_port->valuestring);
+    memset(URL, 0, sizeof(URL));
+    strcat(URL, "http://");//"http://192.168.31.99:8085/data.json";
+    strcat(URL, json_ip_address->valuestring);
+    strcat(URL, ":");
+    strcat(URL, json_port->valuestring);
+    strcat(URL, "/data.json");
+    ESP_LOGI(TAG, "url:%s", URL);
 
     /*--------------------------step3:连接wifi--------------------------------------*/
 
@@ -336,25 +338,47 @@ void wifi_init_sta(void)
 
     /* xEventGroupWaitBits() returns the bits before the call returned, hence we can test which event actually
      * happened. */
-    if (bits & WIFI_CONNECTED_BIT) {
+    if (bits & WIFI_CONNECTED_BIT)
+    {
         ESP_LOGI(TAG, "connected to ap SSID:%s password:%s",
                  wifi_config.sta.ssid, wifi_config.sta.password);
-    } else if (bits & WIFI_FAIL_BIT) {
+    }
+    else if (bits & WIFI_FAIL_BIT)
+    {
         ESP_LOGI(TAG, "Failed to connect to SSID:%s, password:%s",
                  wifi_config.sta.ssid, wifi_config.sta.password);
-    } else {
+        
+        goto flag_err;
+    }
+    else
+    {
         ESP_LOGE(TAG, "UNEXPECTED EVENT");
+        goto flag_err;
     }
 
     /* The event will not be processed after unregister */
     ESP_ERROR_CHECK(esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, instance_got_ip));
     ESP_ERROR_CHECK(esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, instance_any_id));
 
+    nvs_close(nvs_handle);
+
     // cJSON_Delete(json_port);
     // cJSON_Delete(json_ip_address);
     // cJSON_Delete(json_wifi_pass);
     // cJSON_Delete(json_wifi_ssid);
     cJSON_Delete(json_root);
+
+    return;
+    
+    flag_err:
+    nvs_set_str(nvs_handle, NVS_ACTIVE_STR, NVS_FALSE_STR);
+    nvs_commit(nvs_handle);
+    nvs_close(nvs_handle);
+    oled->clear(oled);
+    oled->printf(0, 0, 0, oled, "connecting err,reboot...");
+    ESP_LOGE(TAG, "wifi connect error, will be reboot");
+    vTaskDelay(4000 / portTICK_RATE_MS);
+    esp_restart();
 }
 
 
@@ -461,7 +485,7 @@ static void udp_server_task(void *pvParameters)
                 oled->printf(0, 0, 0, oled, "wifi config ok!");
                 ESP_LOGI(TAG, "get json success, reboot now!");
 
-                vTaskDelay(2000 / portTICK_RATE_MS);
+                vTaskDelay(3000 / portTICK_RATE_MS);
                 esp_restart();
             }
         }
