@@ -59,7 +59,6 @@ void wifi_wizard_connect(void);
 void wifi_init_sta(void);
 
 
-
 /**
  * @brief wifi 配置向导，用于获取wifi名称、密码，并进行连接配置
  * 
@@ -497,4 +496,22 @@ static void udp_server_task(void *pvParameters)
         }
     }
     vTaskDelete(NULL);
+}
+
+
+/**
+ * @brief 将nvs的标志位清空
+ * 
+ */
+void wifi_wizard_reset(void)
+{
+    nvs_handle_t nvs_handle;
+
+    nvs_open(NVS_NAME_STR, NVS_READWRITE, &nvs_handle);
+
+    nvs_set_str(nvs_handle, NVS_ACTIVE_STR, NVS_FALSE_STR);
+
+    nvs_commit(nvs_handle);
+
+    nvs_close(nvs_handle);
 }
