@@ -19,6 +19,9 @@
 
 #include "button.h"
 
+#include "pc.h"
+
+
 static const char *TAG = "pc_monitor";
 
 void app_main(void)
@@ -45,7 +48,21 @@ void app_main(void)
 
 	wifi_wizard_init();
 
-	//int i;
+	vTaskDelay(3000 / portTICK_RATE_MS);
+
+	while(true)
+	{
+		if(wifi_get_sta_state() == true)
+		{
+			pc_init(wifi_get_url());
+			break;
+		}
+		else
+		{
+			vTaskDelay(2000 / portTICK_RATE_MS);
+		}
+	}
+
 	while (1) {
 		//ESP_LOGI(TAG, "hello world");
 		// memset(oled->buffer, 0x00, oled->bufsize);

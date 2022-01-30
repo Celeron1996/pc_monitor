@@ -45,6 +45,9 @@ static const char *NVS_TRUE_STR = "true";
 static const char *NVS_FALSE_STR = "false";
 static const char *NVS_JSON_STR = "json";
 
+/**/
+static bool sta_state = false;
+
 
 /* FreeRTOS event group to signal when we are connected*/
 static EventGroupHandle_t s_wifi_event_group;
@@ -341,6 +344,7 @@ void wifi_init_sta(void)
     {
         ESP_LOGI(TAG, "connected to ap SSID:%s password:%s",
                  wifi_config.sta.ssid, wifi_config.sta.password);
+        sta_state = true;
     }
     else if (bits & WIFI_FAIL_BIT)
     {
@@ -514,4 +518,17 @@ void wifi_wizard_reset(void)
     nvs_commit(nvs_handle);
 
     nvs_close(nvs_handle);
+}
+
+
+char *wifi_get_url(void)
+{
+    return URL;
+}
+
+
+
+bool wifi_get_sta_state(void)
+{
+    return sta_state;
 }
