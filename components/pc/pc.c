@@ -111,7 +111,6 @@ static void pc_task(void *pvParameters)
 
         cJSON *json_root = NULL;
         cJSON *json_children;
-        cJSON *json_children_;
         int children_size;
         json_root = cJSON_Parse(buffer);
         json_children = cJSON_GetObjectItem(json_root, "Children");

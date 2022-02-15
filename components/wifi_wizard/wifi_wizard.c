@@ -527,7 +527,10 @@ char *wifi_get_url(void)
 }
 
 
-
+/**
+ * @brief 获取是否处于sta模式
+ * 
+ */
 bool wifi_get_sta_state(void)
 {
     return sta_state;

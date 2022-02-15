@@ -3,5 +3,6 @@
 
 
 void pc_init(const char *url);
+char *const pc_get_json(void);
 
 #endif
