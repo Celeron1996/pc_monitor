@@ -8,7 +8,6 @@
 #include "driver/spi_master.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
-#include "oled.h"
 #include "wifi_wizard.h"
 #include "esp_err.h"
 
@@ -45,7 +44,7 @@ static const char *NVS_TRUE_STR = "true";
 static const char *NVS_FALSE_STR = "false";
 static const char *NVS_JSON_STR = "json";
 
-/**/
+/*是否处于sta状态*/
 static bool sta_state = false;
 
 
@@ -71,24 +70,16 @@ void wifi_wizard_init(void)
     esp_err_t err;
     char buffer[16];
     size_t length;
-    oled_handler_p oled;
     nvs_handle_t nvs_handle;
 
     s_wifi_event_group = xEventGroupCreate();   /*事件标记组，等待连接上wifi或失败的事件*/
 
-    oled = oled_get_handler();
-    if(oled == NULL)
-    {
-        ESP_LOGE(TAG, "oled_get_handler error!");
-        while(1);
-    }
-    oled->clear(oled);
+
 
     err = nvs_open("config", NVS_READWRITE, &nvs_handle);
     if(err != ESP_OK)
     {
         ESP_LOGE(TAG, "nvs_open error, code = %d", err);
-        oled->printf(0, 0, 0, oled, "wifi config error");
         while(1);
     }
 
@@ -98,7 +89,6 @@ void wifi_wizard_init(void)
     if(err == ESP_OK)
     {
         if(memcmp(buffer, NVS_TRUE_STR, strlen(NVS_TRUE_STR)) == 0)
-        //if(false)
         {
             /*存储的wifi是正确的，可以使用*/
             wifi_wizard_connect();
@@ -232,24 +222,15 @@ void wifi_init_sta(void)
     esp_err_t err;
     char buffer[128];
     size_t length;
-    oled_handler_p oled;
     nvs_handle_t nvs_handle;
 
-    /*获取oled、清屏*/
-    oled = oled_get_handler();
-    if(oled == NULL)
-    {
-        ESP_LOGE(TAG, "oled_get_handler error!");
-        while(1);
-    }
-    oled->clear(oled);
+
 
     /*打开nvs*/
     err = nvs_open(NVS_NAME_STR, NVS_READWRITE, &nvs_handle);
     if(err != ESP_OK)
     {
         ESP_LOGE(TAG, "nvs_open error, code = %d", err);
-        oled->printf(0, 0, 0, oled, "nvs_open error!!!");
         while(1);
     }
 
@@ -377,8 +358,6 @@ void wifi_init_sta(void)
     nvs_set_str(nvs_handle, NVS_ACTIVE_STR, NVS_FALSE_STR);
     nvs_commit(nvs_handle);
     nvs_close(nvs_handle);
-    oled->clear(oled);
-    oled->printf(0, 0, 0, oled, "connecting err,reboot...");
     ESP_LOGE(TAG, "wifi connect error, will be reboot");
     vTaskDelay(4000 / portTICK_RATE_MS);
     esp_restart();
@@ -394,19 +373,7 @@ static void udp_server_task(void *pvParameters)
     int addr_family = (int)pvParameters;
     int ip_protocol = 0;
     struct sockaddr_in6 dest_addr;
-    oled_handler_p oled;
     nvs_handle_t nvs_handle;
-
-    oled = oled_get_handler();
-    if (oled == NULL)
-    {
-        ESP_LOGE(TAG, "oled get handler error!");
-        while(1);
-    }
-
-    oled->clear(oled);
-
-    oled->printf(0, 0, 0, oled, "wifi config ing...");
 
     while (1) {
 
@@ -485,7 +452,6 @@ static void udp_server_task(void *pvParameters)
                 nvs_commit(nvs_handle);
                 nvs_close(nvs_handle);
 
-                oled->printf(0, 0, 0, oled, "wifi config ok!");
                 ESP_LOGI(TAG, "get json success, reboot now!");
 
                 vTaskDelay(3000 / portTICK_RATE_MS);

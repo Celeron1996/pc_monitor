@@ -83,54 +83,37 @@ void app_main(void)
 
 
     //Initialize NVS
-    // esp_err_t ret = nvs_flash_init();
-    // if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-    //   ESP_ERROR_CHECK(nvs_flash_erase());
-    //   ret = nvs_flash_init();
-    // }
-    // ESP_ERROR_CHECK(ret);
-    // ESP_ERROR_CHECK(esp_netif_init());
-    // ESP_ERROR_CHECK(esp_event_loop_create_default());
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+      ESP_ERROR_CHECK(nvs_flash_erase());
+      ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
     
+	button_init();
 
-	// oled_handler_p oled;
+	wifi_wizard_init();
 
-	// if( oled_init() != oled_ok)
-	// 	while(1);
-	
-	// oled = oled_get_handler();
+	vTaskDelay(3000 / portTICK_RATE_MS);
 
-	// button_init();
+	while(true)
+	{
+		if(wifi_get_sta_state() == true)
+		{
+			pc_init(wifi_get_url());
+			break;
+		}
+		else
+		{
+			vTaskDelay(2000 / portTICK_RATE_MS);
+		}
+	}
 
-	// wifi_wizard_init();
-
-	// vTaskDelay(3000 / portTICK_RATE_MS);
-
-	// while(true)
-	// {
-	// 	if(wifi_get_sta_state() == true)
-	// 	{
-	// 		pc_init(wifi_get_url());
-	// 		break;
-	// 	}
-	// 	else
-	// 	{
-	// 		vTaskDelay(2000 / portTICK_RATE_MS);
-	// 	}
-	// }
-
-	// while (1) {
-
-	// 	vTaskDelay(500 / portTICK_RATE_MS);
-	// 	//oled->clear(oled);
-
-	// 	oled->printf(0, 0, 1, oled, "hello world! my name is zhu shi liang ! how are you? fucking your monther");
-		
-	// 	 vTaskDelay(500 / portTICK_RATE_MS);
-
-	// 	 oled->printf(0, 0, 0, oled, "hello world! my name is zhu shi liang ! how are you? fucking your monther");
-	// 	// oled->clear(oled);
-	// }
+	while (1) {
+		 vTaskDelay(500 / portTICK_RATE_MS);
+	}
 }
 
 
