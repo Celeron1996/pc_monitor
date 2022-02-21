@@ -7,21 +7,30 @@
 #include "freertos/task.h"
 #include "esp_freertos_hooks.h"
 #include "freertos/semphr.h"
+#include "freertos/event_groups.h"
 
 #include "esp_system.h"
 #include "driver/spi_master.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
+#include "esp_err.h"
 
+#include "esp_crt_bundle.h"
+#include "esp_http_client.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
+#include "esp_netif.h"
+#include "esp_tls.h"
 #include "nvs_flash.h"
+
 #include "lwip/err.h"
 #include "lwip/sys.h"
+#include "lwip/sockets.h"
+#include <lwip/netdb.h>
 
 #include "button.h"
-#include "wifi_wizard.h"
-#include "pc.h"
+
+#include "cJSON.h"
 
 /* Littlevgl specific */
 #ifdef LV_LVGL_H_INCLUDE_SIMPLE
@@ -46,7 +55,7 @@
 #endif
 
 
-/*-----------------------------LVGL about-----------------------------*/
+/*---------------------------- LVGL about (begin) ----------------------------*/
 /**********************
  *  STATIC PROTOTYPES
  **********************/
@@ -64,24 +73,60 @@ static void create_demo_application(void);
  * 函数或任务，应该向这个信号量发送消息
  */
 SemaphoreHandle_t xGuiSemaphore;
-/*---------------------------------------------------------------------*/
+/*---------------------------- LVGL about (end) -----------------------------*/
 
+/*--------------------------- http client (begin) -----------------------------*/
+#define MAX_HTTP_RECV_BUFFER_ (10*1024) /*用于存储PC httpServer接收到的json字符串的缓存的大小*/
+static void http_task(void *pvParameters);  /*http任务，从PC http Server中读取信息json*/
 
+/**
+ * @brief 当连接上wifi之后，通过这个信号量通知http task，http task中得到信号量后再建立http client服务
+ */
+SemaphoreHandle_t xHttpSemaphore = NULL;
+/*---------------------------- http client (end) ------------------------------*/
+
+/*--------------------------- wifi (begin) ------------------------------------*/
+#define ESP_AP_WIFI_SSID      "PCMonitor"   /*wifi ssid*/
+#define ESP_AP_WIFI_PASS      ""            /*wifi pass*/
+#define ESP_AP_WIFI_CHANNEL   1             /*wifi 通道数量*/
+#define ESP_AP_MAX_STA_COUNT  1             /*wifi 处于ap模式时，最大可连接数量*/
+
+static EventGroupHandle_t s_wifi_event_group;   /*标志wifi各种事件*/
+#define WIFI_CONNECTED_BIT BIT0     /*连接 ap 成功事件标志位*/
+#define WIFI_FAIL_BIT      BIT1     /*连接失败事件标志位*/
+#define WIFI_AP_OK_BIT     BIT2     /*wifi ap 模式创建成功事件标志位*/
+
+#define ESP_STA_MAXIMUM_RETRY  16  /*wifi重连次数*/
+static int s_retry_num = 0; /*用于记录重连次数*/
+
+#define UDP_SERVER_PORT (8848)  /*在配网时，开启udp server的端口*/
+/* 函数声明 */
+static void udp_server_task(void *pvParameters);    /*在配网时通过udp server接收来自手机小程序的wifi信息*/
+static void wifi_init_softap(void); /*wifi 初始化为ap模式，接收来自手机的udp包，用于配网*/
+static void wifi_config(void);  /*wfii 配网函数，调用wifi_init_softap*/
+static void wifi_connect(void); /*wifi 连接路由器函数，调用wifi_init_sta*/
+static void wifi_init_sta(void);    /*wifi 初始化为sta模式，用于连接wfii路由器*/
+static void wifi_task(void *pvParameters);    /*wifi主任务，用于判断wifi是否应该配网，还是直接连接路由器*/
+static void event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data);
+/*---------------------------------- wifi (end) ----------------------------*/
+
+/*存储非易失性存储的字符串*/
+static const char *NVS_NAME_STR = "config";
+static const char *NVS_ACTIVE_STR = "active";
+static const char *NVS_TRUE_STR = "true";
+static const char *NVS_FALSE_STR = "false";
+static const char *NVS_JSON_STR = "json";
+
+static char URL[64] = {0};  /*统一资源定位链接，当PC端生成了http server时，通过此url获取json字符串*/
 
 static const char *TAG = "pc_monitor";
 
-
-
-
-
+/**
+ * @brief 应用主函数
+ * 
+ */
 void app_main(void)
 {
-
-    xTaskCreatePinnedToCore(guiTask, "guiTask", 4096*2, NULL, 0, NULL, 1);
-
-
-
-
     //Initialize NVS
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -91,39 +136,27 @@ void app_main(void)
     ESP_ERROR_CHECK(ret);
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
-    
+
+    xHttpSemaphore = xSemaphoreCreateBinary();
+    if (xHttpSemaphore == NULL)
+    {
+        while (1);
+    }
+
 	button_init();
 
-	wifi_wizard_init();
+    xTaskCreatePinnedToCore(guiTask, "guiTask", 4096*2, (void*)NULL, 0, NULL, 1);
+
+    xTaskCreate(wifi_task, "wifi_task", 8192, (void*)NULL, 5, NULL);
+
+    xTaskCreate(http_task, "http_task", 8192, (void*)NULL, 6, NULL);
 
 	vTaskDelay(3000 / portTICK_RATE_MS);
-
-	while(true)
-	{
-		if(wifi_get_sta_state() == true)
-		{
-			pc_init(wifi_get_url());
-			break;
-		}
-		else
-		{
-			vTaskDelay(2000 / portTICK_RATE_MS);
-		}
-	}
 
 	while (1) {
 		 vTaskDelay(500 / portTICK_RATE_MS);
 	}
 }
-
-
-
-
-
-
-
-
-
 
 
 /**
@@ -270,3 +303,550 @@ static void lv_tick_task(void *arg) {
 
     lv_tick_inc(LV_TICK_PERIOD_MS);
 }
+
+/**
+ * @brief 线程：获取pc的json
+ * 
+ */
+
+static void http_task(void *pvParameters)
+{
+    BaseType_t error = pdFALSE;
+    char *buffer = NULL;
+
+    error = xSemaphoreTake(xHttpSemaphore, portMAX_DELAY);  /*当连接上wifi之后，会得到信号量*/
+    if (error != pdTRUE)
+    {
+        while (1);
+    }
+    vSemaphoreDelete(xHttpSemaphore);
+
+    buffer = malloc(MAX_HTTP_RECV_BUFFER_ + 1);
+    //cJSON *json_root = NULL;
+
+    if (buffer == NULL) {
+        ESP_LOGE(TAG, "Cannot malloc http receive buffer");
+        return;
+    }
+    esp_http_client_config_t config = {
+        .url = URL,
+    };
+    ESP_LOGI(TAG, "url:%s", config.url);
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+
+    while (true) {
+        esp_err_t err;
+        if ((err = esp_http_client_open(client, 0)) != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to open HTTP connection: %s", esp_err_to_name(err));
+            free(buffer);
+            return;
+        }
+        int content_length =  esp_http_client_fetch_headers(client);
+        int total_read_len = 0, read_len;
+        if (total_read_len < content_length && content_length <= MAX_HTTP_RECV_BUFFER_) {
+            read_len = esp_http_client_read(client, buffer, content_length);
+            if (read_len <= 0) {
+                ESP_LOGE(TAG, "Error read data");
+            }
+            buffer[read_len] = 0;
+            ESP_LOGD(TAG, "read_len = %d", read_len);
+        }
+        ESP_LOGI(TAG, "HTTP Stream reader Status = %d, content_length = %d",
+                        esp_http_client_get_status_code(client),
+                        esp_http_client_get_content_length(client));
+
+ 
+
+        cJSON *json_root = NULL;
+        cJSON *json_children;
+        int children_size;
+        json_root = cJSON_Parse(buffer);
+        json_children = cJSON_GetObjectItem(json_root, "Children");
+        children_size = cJSON_GetArraySize(json_children);
+        for (int i = 0; i < children_size; i++) {
+            cJSON *item;
+            item = cJSON_GetArrayItem(json_children, i);
+            if (cJSON_GetArraySize(item) <= 1) {
+                cJSON_Delete(item);   
+            }
+            else {
+                cJSON *host_name = cJSON_GetObjectItem(item, "Text");
+                cJSON *sensors = cJSON_GetObjectItem(item, "Children");
+                cJSON *cpu = cJSON_GetArrayItem(sensors, 1);
+                cJSON *cpu_name = cJSON_GetObjectItem(cpu, "Text");
+                cJSON *cpu_sensor = cJSON_GetObjectItem(cpu, "Children");
+                cJSON *cpu_temperature = cJSON_GetArrayItem(cpu_sensor, 1);
+                cJSON *cpu_temper_children = cJSON_GetObjectItem(cpu_temperature, "Children");
+                cJSON *cpu_temper_package = cJSON_GetArrayItem(cpu_temper_children, 4);
+                cJSON *cpu_temper_package_value = cJSON_GetObjectItem(cpu_temper_package, "Value");
+
+                ESP_LOGI(TAG, "host name = %s, cpu name = %s, cpu tempera = %s", host_name->valuestring, cpu_name->valuestring, cpu_temper_package_value->valuestring);
+
+            }
+        }
+
+
+        // if (json_root) {
+        //     ESP_LOGI(TAG, "json_root->string:%s,json_root->type=%d,json_root->valuedouble=%f,json_root->valueint=%d,json_root->valuestring=%s", 
+        //     json_root->string,
+        //     json_root->type,
+        //     json_root->valuedouble,
+        //     json_root->valueint,
+        //     json_root->valuestring
+        //     );
+        // }
+   
+
+        
+
+        esp_http_client_close(client);
+             
+
+        vTaskDelay(1000/portTICK_PERIOD_MS);                   
+
+
+        cJSON_Delete(json_root);    
+    }
+
+    esp_http_client_cleanup(client);   
+
+
+
+
+    free(buffer);
+    ESP_LOGI(TAG, "Finish http example");
+    vTaskDelete(NULL);
+}
+
+/**
+ * @brief wifi 配置向导，用于获取wifi名称、密码，并进行连接配置
+ * 
+ */
+void wifi_task(void *pvParameters)
+{
+    esp_err_t err;
+    char buffer[16];
+    size_t length;
+    nvs_handle_t nvs_handle;
+
+    s_wifi_event_group = xEventGroupCreate();   /*事件标记组，等待连接上wifi或失败的事件*/
+
+    err = nvs_open("config", NVS_READWRITE, &nvs_handle);
+    if(err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "nvs_open error, code = %d", err);
+        while(1);
+    }
+
+    length = sizeof(buffer);
+    err = nvs_get_str(nvs_handle, NVS_ACTIVE_STR, buffer, &length);
+    nvs_close(nvs_handle);
+    if(err == ESP_OK)
+    {
+        if(memcmp(buffer, NVS_TRUE_STR, strlen(NVS_TRUE_STR)) == 0)
+        {
+            /*存储的wifi是正确的，可以使用*/
+            wifi_connect();
+        }
+        else
+        {
+            /*存储的信息无效，进行配网流程*/
+            wifi_config();
+        }
+    }
+    else
+    {
+        /*可能是没有建立此标签，第一次使用？重新配置一遍*/
+        wifi_config();
+    }
+
+    vEventGroupDelete(s_wifi_event_group);
+}
+
+/**
+ * @brief wifi ap + udp server，receive wifi info from wechat miniprogram
+ * 
+ */
+void wifi_config(void)
+{
+    wifi_init_softap();
+
+    //vTaskDelay(500 / portTICK_RATE_MS);
+    xEventGroupWaitBits(s_wifi_event_group,
+            WIFI_AP_OK_BIT,
+            pdFALSE,
+            pdFALSE,
+            portMAX_DELAY);
+    xTaskCreate(udp_server_task, "udp_server", 4096, (void*)AF_INET, 5, NULL);
+}
+
+/**
+ * @brief wifi 连接向导，将已存储在flash的wifi名称和密码取出，并连接
+ * 
+ */
+void wifi_connect(void)
+{
+    wifi_init_sta();
+}
+
+/**
+ * @brief 事件处理，用于处理wifi在ap/sta模式下的事件
+ * 
+ */
+static void event_handler(void* arg, esp_event_base_t event_base,
+                                    int32_t event_id, void* event_data)
+{
+    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_AP_STACONNECTED)
+    {
+        wifi_event_ap_staconnected_t* event = (wifi_event_ap_staconnected_t*) event_data;
+        ESP_LOGI(TAG, "station "MACSTR" join, AID=%d",
+                 MAC2STR(event->mac), event->aid);
+    } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_AP_STADISCONNECTED)
+    {
+        wifi_event_ap_stadisconnected_t* event = (wifi_event_ap_stadisconnected_t*) event_data;
+        ESP_LOGI(TAG, "station "MACSTR" leave, AID=%d",
+                 MAC2STR(event->mac), event->aid);
+    }
+    else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_AP_START)
+    {
+        ESP_LOGI(TAG, "wifi ap start!");
+        xEventGroupSetBits(s_wifi_event_group, WIFI_AP_OK_BIT);
+    }
+    else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
+    {
+        esp_wifi_connect();
+    }
+    else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
+    {
+        // if (s_retry_num < ESP_STA_MAXIMUM_RETRY)
+        // {
+        //     esp_wifi_connect();
+        //     s_retry_num++;
+        //     ESP_LOGI(TAG, "retry to connect to the AP");
+        // }
+        // else
+        // {
+        //     xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
+        // }
+        esp_wifi_connect();
+        ESP_LOGI(TAG,"connect to the AP fail");
+    }
+    else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
+    {
+        ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
+        ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
+        s_retry_num = 0;
+        xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+    }
+}
+
+/**
+ * @brief wifi初始化为ap模式，用于配网
+ * 
+ */
+void wifi_init_softap(void)
+{
+    esp_netif_create_default_wifi_ap();
+
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
+                                                        ESP_EVENT_ANY_ID,
+                                                        &event_handler,
+                                                        NULL,
+                                                        NULL));
+
+    wifi_config_t wifi_config = {
+        .ap = {
+            .ssid = ESP_AP_WIFI_SSID,
+            .ssid_len = strlen(ESP_AP_WIFI_SSID),
+            .channel = ESP_AP_WIFI_CHANNEL,
+            .password = ESP_AP_WIFI_PASS,
+            .max_connection = ESP_AP_MAX_STA_COUNT,
+            .authmode = WIFI_AUTH_WPA_WPA2_PSK
+        },
+    };
+    if (strlen(ESP_AP_WIFI_PASS) == 0) {
+        wifi_config.ap.authmode = WIFI_AUTH_OPEN;
+    }
+
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
+    ESP_ERROR_CHECK(esp_wifi_start());
+
+    ESP_LOGI(TAG, "wifi_init_softap finished. SSID:%s password:%s channel:%d",
+             ESP_AP_WIFI_SSID, ESP_AP_WIFI_PASS, ESP_AP_WIFI_CHANNEL);
+}
+
+/**
+ * @brief wifi初始化为sta模式，用于连接路由器
+ * 
+ */
+void wifi_init_sta(void)
+{
+    /*--------------------step1:首先，从nvs中获取wifi名称、密码，ip地址等--------------*/
+    esp_err_t err;
+    char buffer[128];
+    size_t length;
+    nvs_handle_t nvs_handle;
+
+
+
+    /*打开nvs*/
+    err = nvs_open(NVS_NAME_STR, NVS_READWRITE, &nvs_handle);
+    if(err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "nvs_open error, code = %d", err);
+        while(1);
+    }
+
+    /*获取json*/
+    length = sizeof(buffer);
+    err = nvs_get_str(nvs_handle, NVS_JSON_STR, buffer, &length);
+    if(err == ESP_OK)
+    {
+        ESP_LOGI(TAG, "get nvs wifi json success! json = %s", buffer);
+    }
+    else
+    {
+        ESP_LOGE(TAG, "nvs active error, code = %d", err);
+        goto flag_err;
+    }
+
+    /*------------------------step2:获取成功，解析json----------------------------------*/
+    cJSON *json_root = cJSON_Parse(buffer);
+    cJSON *json_wifi_ssid = cJSON_GetObjectItem(json_root, "wifi_ssid");
+    cJSON *json_wifi_pass = cJSON_GetObjectItem(json_root, "wifi_pass");
+    cJSON *json_ip_address = cJSON_GetObjectItem(json_root, "ip_address");
+    cJSON *json_port = cJSON_GetObjectItem(json_root, "port");
+
+    ESP_LOGI(TAG, "wifi ssid:%s, wifi pass:%s, ip:%s, port:%s", 
+            json_wifi_ssid->valuestring,
+            json_wifi_pass->valuestring,
+            json_ip_address->valuestring, json_port->valuestring);
+    memset(URL, 0, sizeof(URL));
+    strcat(URL, "http://");//"http://192.168.31.99:8085/data.json";
+    strcat(URL, json_ip_address->valuestring);
+    strcat(URL, ":");
+    strcat(URL, json_port->valuestring);
+    strcat(URL, "/data.json");
+    ESP_LOGI(TAG, "url:%s", URL);
+
+    /*--------------------------step3:连接wifi--------------------------------------*/
+
+    esp_netif_create_default_wifi_sta();
+
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+    esp_event_handler_instance_t instance_any_id;
+    esp_event_handler_instance_t instance_got_ip;
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
+                                                        ESP_EVENT_ANY_ID,
+                                                        &event_handler,
+                                                        NULL,
+                                                        &instance_any_id));
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
+                                                        IP_EVENT_STA_GOT_IP,
+                                                        &event_handler,
+                                                        NULL,
+                                                        &instance_got_ip));
+
+    wifi_config_t wifi_config = {
+        .sta = {
+            //  .ssid = json_wifi_ssid->valuestring,
+            //  .password = json_wifi_pass->valuestring,
+            /* Setting a password implies station will connect to all security modes including WEP/WPA.
+             * However these modes are deprecated and not advisable to be used. Incase your Access point
+             * doesn't support WPA2, these mode can be enabled by commenting below line */
+	     .threshold.authmode = WIFI_AUTH_WPA2_PSK,
+            
+
+            .pmf_cfg = {
+                .capable = true,
+                .required = false
+            },
+        },
+    };
+
+    memcpy(wifi_config.sta.ssid, json_wifi_ssid->valuestring, strlen(json_wifi_ssid->valuestring));
+    memcpy(wifi_config.sta.password, json_wifi_pass->valuestring, strlen(json_wifi_pass->valuestring));
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config) );
+    ESP_ERROR_CHECK(esp_wifi_start() );
+
+    ESP_LOGI(TAG, "wifi_init_sta finished.");
+
+    /* Waiting until either the connection is established (WIFI_CONNECTED_BIT) or connection failed for the maximum
+     * number of re-tries (WIFI_FAIL_BIT). The bits are set by event_handler() (see above) */
+    EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group,
+            WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
+            pdFALSE,
+            pdFALSE,
+            portMAX_DELAY);
+
+    /* xEventGroupWaitBits() returns the bits before the call returned, hence we can test which event actually
+     * happened. */
+    if (bits & WIFI_CONNECTED_BIT)
+    {
+        ESP_LOGI(TAG, "connected to ap SSID:%s password:%s",
+                 wifi_config.sta.ssid, wifi_config.sta.password);
+        xSemaphoreGive(xHttpSemaphore); /*向http发送信号，告诉它已连接上wifi，可以开始http client任务了*/
+    }
+    else if (bits & WIFI_FAIL_BIT)
+    {
+        ESP_LOGI(TAG, "Failed to connect to SSID:%s, password:%s",
+                 wifi_config.sta.ssid, wifi_config.sta.password);
+        
+        goto flag_err;
+    }
+    else
+    {
+        ESP_LOGE(TAG, "UNEXPECTED EVENT");
+        goto flag_err;
+    }
+
+    /* The event will not be processed after unregister */
+    ESP_ERROR_CHECK(esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, instance_got_ip));
+    ESP_ERROR_CHECK(esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, instance_any_id));
+
+    nvs_close(nvs_handle);
+
+    cJSON_Delete(json_root);
+
+    return;
+    
+    flag_err:
+    nvs_set_str(nvs_handle, NVS_ACTIVE_STR, NVS_FALSE_STR);
+    nvs_commit(nvs_handle);
+    nvs_close(nvs_handle);
+    ESP_LOGE(TAG, "wifi connect error, will be reboot");
+    vTaskDelay(4000 / portTICK_RATE_MS);
+    esp_restart();
+}
+
+/**
+ * @brief 在配网时通过udp server接收来自手机小程序的wifi信息
+ * 
+ */
+static void udp_server_task(void *pvParameters)
+{
+    char rx_buffer[128];
+    char addr_str[128];
+    int addr_family = (int)pvParameters;
+    int ip_protocol = 0;
+    struct sockaddr_in6 dest_addr;
+    nvs_handle_t nvs_handle;
+
+    while (1) {
+
+        if (addr_family == AF_INET) {
+            struct sockaddr_in *dest_addr_ip4 = (struct sockaddr_in *)&dest_addr;
+            dest_addr_ip4->sin_addr.s_addr = htonl(INADDR_ANY);
+            dest_addr_ip4->sin_family = AF_INET;
+            dest_addr_ip4->sin_port = htons(UDP_SERVER_PORT);
+            ip_protocol = IPPROTO_IP;
+        } else if (addr_family == AF_INET6) {
+            bzero(&dest_addr.sin6_addr.un, sizeof(dest_addr.sin6_addr.un));
+            dest_addr.sin6_family = AF_INET6;
+            dest_addr.sin6_port = htons(UDP_SERVER_PORT);
+            ip_protocol = IPPROTO_IPV6;
+        }
+
+        int sock = socket(addr_family, SOCK_DGRAM, ip_protocol);
+        if (sock < 0) {
+            ESP_LOGE(TAG, "Unable to create socket: errno %d", errno);
+            break;
+        }
+        ESP_LOGI(TAG, "Socket created");
+
+#if defined(CONFIG_EXAMPLE_IPV4) && defined(CONFIG_EXAMPLE_IPV6)
+        if (addr_family == AF_INET6) {
+            // Note that by default IPV6 binds to both protocols, it is must be disabled
+            // if both protocols used at the same time (used in CI)
+            int opt = 1;
+            setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+            setsockopt(sock, IPPROTO_IPV6, IPV6_V6ONLY, &opt, sizeof(opt));
+        }
+#endif
+
+        int err = bind(sock, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
+        if (err < 0) {
+            ESP_LOGE(TAG, "Socket unable to bind: errno %d", errno);
+        }
+        ESP_LOGI(TAG, "Socket bound, port %d", UDP_SERVER_PORT);
+
+        while (1) {
+
+            ESP_LOGI(TAG, "Waiting for data");
+            struct sockaddr_storage source_addr; // Large enough for both IPv4 or IPv6
+            socklen_t socklen = sizeof(source_addr);
+            int len = recvfrom(sock, rx_buffer, sizeof(rx_buffer) - 1, 0, (struct sockaddr *)&source_addr, &socklen);
+
+            // Error occurred during receiving
+            if (len < 0) {
+                ESP_LOGE(TAG, "recvfrom failed: errno %d", errno);
+                break;
+            }
+            // Data received
+            else {
+                // Get the sender's ip address as string
+                if (source_addr.ss_family == PF_INET) {
+                    inet_ntoa_r(((struct sockaddr_in *)&source_addr)->sin_addr, addr_str, sizeof(addr_str) - 1);
+                } else if (source_addr.ss_family == PF_INET6) {
+                    inet6_ntoa_r(((struct sockaddr_in6 *)&source_addr)->sin6_addr, addr_str, sizeof(addr_str) - 1);
+                }
+
+                rx_buffer[len] = 0; // Null-terminate whatever we received and treat like a string...
+                ESP_LOGI(TAG, "Received %d bytes from %s:", len, addr_str);
+                ESP_LOGI(TAG, "%s", rx_buffer);
+            
+                err = nvs_open("config", NVS_READWRITE, &nvs_handle);
+                if (err != ESP_OK)
+                    ESP_LOGE(TAG, "nvs open err = %d", err);
+
+                err = nvs_set_str(nvs_handle, NVS_JSON_STR, rx_buffer);
+                if (err != ESP_OK)
+                    ESP_LOGE(TAG, "nvs set json err = %d", err);
+
+                err = nvs_set_str(nvs_handle, NVS_ACTIVE_STR, NVS_TRUE_STR);
+                if(err != ESP_OK)
+                    ESP_LOGE(TAG, "nvs set active err = %d", err);
+                nvs_commit(nvs_handle);
+                nvs_close(nvs_handle);
+
+                ESP_LOGI(TAG, "get json success, reboot now!");
+
+                vTaskDelay(3000 / portTICK_RATE_MS);
+                esp_restart();
+            }
+        }
+
+        if (sock != -1) {
+            ESP_LOGE(TAG, "Shutting down socket and restarting...");
+            shutdown(sock, 0);
+            close(sock);
+        }
+    }
+    vTaskDelete(NULL);
+}
+
+
+/**
+ * @brief 将nvs的标志位清空
+ * 
+ */
+void wifi_reset(void)
+{
+    nvs_handle_t nvs_handle;
+
+    nvs_open(NVS_NAME_STR, NVS_READWRITE, &nvs_handle);
+
+    nvs_set_str(nvs_handle, NVS_ACTIVE_STR, NVS_FALSE_STR);
+
+    nvs_commit(nvs_handle);
+
+    nvs_close(nvs_handle);
+}
+

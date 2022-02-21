@@ -41,7 +41,7 @@ static void button_task(void* arg)
                 if(counter >= 10)
                 {
                     ESP_LOGI(TAG, "button reset operation");
-                    wifi_wizard_reset();
+                    //wifi_wizard_reset();
                     ESP_LOGI(TAG, "will be reboot");
                     vTaskDelay(3000 / portTICK_RATE_MS);
                     esp_restart();
@@ -72,15 +72,15 @@ void button_init(void)
     io_conf.pull_down_en = 0;
     gpio_config(&io_conf);
 
-    //create a queue to handle gpio event from isr
-    button_evt_queue = xQueueCreate(10, sizeof(uint32_t));
-
-    //start gpio task
-    xTaskCreate(button_task, "button_task", 2048, NULL, 10, &button_task_handle);
-
     //install gpio isr service
     gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT);
 
     //hook isr handler for specific gpio pin
     gpio_isr_handler_add(BUTTON_SET_GPIO_PIN, button_isr_handler, (void*) BUTTON_SET_GPIO_PIN);
+
+    //create a queue to handle gpio event from isr
+    button_evt_queue = xQueueCreate(10, sizeof(uint32_t));
+
+    //start gpio task
+    xTaskCreate(button_task, "button_task", 2048, NULL, 10, &button_task_handle);
 }

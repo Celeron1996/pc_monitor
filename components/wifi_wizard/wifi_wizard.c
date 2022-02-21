@@ -74,8 +74,6 @@ void wifi_wizard_init(void)
 
     s_wifi_event_group = xEventGroupCreate();   /*事件标记组，等待连接上wifi或失败的事件*/
 
-
-
     err = nvs_open("config", NVS_READWRITE, &nvs_handle);
     if(err != ESP_OK)
     {
