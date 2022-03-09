@@ -163,6 +163,7 @@ void app_main(void)
  * @brief lgvl线程
  * 
  */
+void my_demo(void);
 static void guiTask(void *pvParameter) {
 
     (void) pvParameter;
@@ -235,7 +236,8 @@ static void guiTask(void *pvParameter) {
     ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, LV_TICK_PERIOD_MS * 1000));
 
     /* Create the demo application */
-    create_demo_application();
+    //create_demo_application();
+    my_demo();
 
     while (1) {
         /* Delay 1 tick (assumes FreeRTOS tick is 10ms */
@@ -850,3 +852,61 @@ void wifi_reset(void)
     nvs_close(nvs_handle);
 }
 
+
+
+
+
+
+
+
+/********************************my demo******************************************************/
+lv_obj_t * lmeter;
+lv_obj_t * label1;
+
+static void my_demo_task(void *pvParameters)
+{
+    int32_t value = 0;
+    bool is_add = true;
+
+    while (true)
+    {
+        lv_linemeter_set_value(lmeter, value);
+        vTaskDelay(pdMS_TO_TICKS(20));
+
+        if (value > 100)
+        {
+            is_add = false;
+        }
+        else if (value < 0)
+        {
+            is_add = true;
+        }
+        if (is_add)
+        {
+            value++;
+        }
+        else
+        {
+            value--;
+        }
+    }
+}
+void my_demo(void)
+{
+    /*Create a line meter */
+    
+    lmeter = lv_linemeter_create(lv_scr_act(), NULL);
+    lv_linemeter_set_range(lmeter, 0, 100);                   /*Set the range*/
+    lv_linemeter_set_value(lmeter, 80);                       /*Set the current value*/
+    lv_linemeter_set_scale(lmeter, 240, 30);                  /*Set the angle and number of lines*/
+    //lv_linemeter_set_angle_offset(lmeter, 90);
+    //lv_linemeter_set_mirror(lmeter, true);
+    lv_obj_set_size(lmeter, 240, 240);
+    lv_obj_align(lmeter, NULL, LV_ALIGN_CENTER, 0, 0);
+
+    label1 = lv_label_create(lmeter, NULL);
+    lv_label_set_text(label1, "Hello World");
+    lv_obj_align(label1, NULL, LV_ALIGN_CENTER, 0, 0);
+
+    xTaskCreate(my_demo_task, "my_demo_task", 2048, (void*)NULL, 0, NULL);
+}
