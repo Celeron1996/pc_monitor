@@ -891,7 +891,8 @@ static void my_demo_task(void *pvParameters)
         }
     }
 }
-void my_demo(void)
+
+void linemeter_demo(void)
 {
     /*Create a line meter */
     
@@ -899,8 +900,6 @@ void my_demo(void)
     lv_linemeter_set_range(lmeter, 0, 100);                   /*Set the range*/
     lv_linemeter_set_value(lmeter, 80);                       /*Set the current value*/
     lv_linemeter_set_scale(lmeter, 240, 30);                  /*Set the angle and number of lines*/
-    //lv_linemeter_set_angle_offset(lmeter, 90);
-    //lv_linemeter_set_mirror(lmeter, true);
     lv_obj_set_size(lmeter, 240, 240);
     lv_obj_align(lmeter, NULL, LV_ALIGN_CENTER, 0, 0);
 
@@ -909,4 +908,18 @@ void my_demo(void)
     lv_obj_align(label1, NULL, LV_ALIGN_CENTER, 0, 0);
 
     xTaskCreate(my_demo_task, "my_demo_task", 2048, (void*)NULL, 0, NULL);
+}
+
+void image_demo(void)
+{
+    LV_IMG_DECLARE(girl);
+    lv_obj_t * img1 = lv_img_create(lv_scr_act(), NULL);
+    lv_img_set_src(img1, &girl);
+    // lv_obj_align(img1, NULL, LV_ALIGN_CENTER, 0, -0);
+    // lv_obj_set_size(img1, 240, 240);
+}
+void my_demo(void)
+{
+    //linemeter_demo();
+    image_demo();
 }
