@@ -741,6 +741,11 @@ static void udp_server_task(void *pvParameters)
     struct sockaddr_in6 dest_addr;
     nvs_handle_t nvs_handle;
 
+    LV_IMG_DECLARE(girl);
+    lv_obj_t * img1 = lv_img_create(lv_scr_act(), NULL);
+    lv_img_set_src(img1, &girl);
+    lv_img_set_auto_size(img1, true);
+
     while (1) {
 
         if (addr_family == AF_INET) {
@@ -917,8 +922,6 @@ void image_demo(void)
     lv_img_set_src(img1, &girl);
     lv_obj_align(img1, NULL, LV_ALIGN_CENTER, 0, 0);
     lv_img_set_auto_size(img1, true);
-    lv_img_set_zoom(img1, 200);
-    lv_img_set_antialias(img1, true);
 }
 void my_demo(void)
 {
