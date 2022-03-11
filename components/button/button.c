@@ -12,9 +12,11 @@
 
 static const char *TAG = "button";
 
-#define BUTTON_SET_GPIO_PIN 4
+#define BUTTON_SET_GPIO_PIN 1
 #define BUTTON_SET_GPIO_MASK    (1ULL << BUTTON_SET_GPIO_PIN)
 #define ESP_INTR_FLAG_DEFAULT 0
+
+extern void wifi_reset(void);
 
 static xQueueHandle button_evt_queue = NULL;
 
@@ -41,7 +43,7 @@ static void button_task(void* arg)
                 if(counter >= 10)
                 {
                     ESP_LOGI(TAG, "button reset operation");
-                    //wifi_wizard_reset();
+                    wifi_reset();
                     ESP_LOGI(TAG, "will be reboot");
                     vTaskDelay(3000 / portTICK_RATE_MS);
                     esp_restart();

@@ -147,9 +147,11 @@ void app_main(void)
 
     xTaskCreatePinnedToCore(guiTask, "guiTask", 4096*2, (void*)NULL, 0, NULL, 1);
 
-    xTaskCreate(wifi_task, "wifi_task", 8192, (void*)NULL, 5, NULL);
+    vTaskDelay(pdMS_TO_TICKS(3000));
 
-    xTaskCreate(http_task, "http_task", 8192, (void*)NULL, 6, NULL);
+    xTaskCreate(wifi_task, "wifi_task", 8192, (void*)NULL, 1, NULL);
+
+    xTaskCreate(http_task, "http_task", 8192, (void*)NULL, 1, NULL);
 
 	vTaskDelay(3000 / portTICK_RATE_MS);
 
@@ -335,6 +337,14 @@ static void http_task(void *pvParameters)
     };
     ESP_LOGI(TAG, "url:%s", config.url);
     esp_http_client_handle_t client = esp_http_client_init(&config);
+    if (client == NULL)
+    {
+        while (true)
+        {
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            ESP_LOGE(TAG, "esp_http_client_init error");
+        }
+    }
 
     while (true) {
         esp_err_t err;
@@ -462,7 +472,14 @@ void wifi_task(void *pvParameters)
         wifi_config();
     }
 
+    xEventGroupWaitBits(s_wifi_event_group,
+            WIFI_CONNECTED_BIT,
+            pdFALSE,
+            pdFALSE,
+            portMAX_DELAY);
     vEventGroupDelete(s_wifi_event_group);
+
+    vTaskDelete(NULL);
 }
 
 /**
@@ -479,7 +496,7 @@ void wifi_config(void)
             pdFALSE,
             pdFALSE,
             portMAX_DELAY);
-    xTaskCreate(udp_server_task, "udp_server", 4096, (void*)AF_INET, 5, NULL);
+    xTaskCreate(udp_server_task, "udp_server", 8*1024, (void*)AF_INET, 1, NULL);
 }
 
 /**
@@ -926,5 +943,5 @@ void image_demo(void)
 void my_demo(void)
 {
     //linemeter_demo();
-    image_demo();
+    //image_demo();
 }
