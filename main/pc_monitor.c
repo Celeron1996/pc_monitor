@@ -67,6 +67,7 @@
 static void lv_tick_task(void *arg);
 static void guiTask(void *pvParameter);
 static void create_demo_application(void);
+static void my_style(void);
 
 /**
  * @brief 创建一个信号量来处理lvgl的并发调用，如果想从其他多个线程/任务调用lvgl
@@ -240,6 +241,9 @@ static void guiTask(void *pvParameter) {
     /* Create the demo application */
     //create_demo_application();
     my_demo();
+    /*--------------my lvgl style init--------------*/
+    my_style();
+    /*----------------------------------------------*/
 
     while (1) {
         /* Delay 1 tick (assumes FreeRTOS tick is 10ms */
@@ -944,4 +948,18 @@ void my_demo(void)
 {
     //linemeter_demo();
     //image_demo();
+}
+
+
+static void my_style(void)
+{
+    static lv_style_t style;
+
+    lv_obj_t *obj = lv_scr_act();
+
+    lv_style_init(&style);
+
+    lv_style_set_bg_color(&style, LV_STATE_DEFAULT, LV_COLOR_BLACK);
+
+    lv_obj_add_style(obj, LV_OBJ_PART_MAIN, &style);
 }
