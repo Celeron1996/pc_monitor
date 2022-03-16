@@ -68,6 +68,7 @@ static void lv_tick_task(void *arg);
 static void guiTask(void *pvParameter);
 static void create_demo_application(void);
 static void my_style(void);
+static void create_gui_task_loading(void);
 
 /**
  * @brief 创建一个信号量来处理lvgl的并发调用，如果想从其他多个线程/任务调用lvgl
@@ -121,6 +122,8 @@ static const char *NVS_JSON_STR = "json";
 static char URL[64] = {0};  /*统一资源定位链接，当PC端生成了http server时，通过此url获取json字符串*/
 
 static const char *TAG = "pc_monitor";
+
+static lv_style_t style;    /*全局样式*/
 
 /**
  * @brief 应用主函数
@@ -352,10 +355,12 @@ static void http_task(void *pvParameters)
 
     while (true) {
         esp_err_t err;
-        if ((err = esp_http_client_open(client, 0)) != ESP_OK) {
+        while ((err = esp_http_client_open(client, 0)) != ESP_OK) {
             ESP_LOGE(TAG, "Failed to open HTTP connection: %s", esp_err_to_name(err));
-            free(buffer);
-            return;
+            //free(buffer);
+            //return;
+            esp_http_client_close(client);
+            vTaskDelay(pdMS_TO_TICKS(1000));
         }
         int content_length =  esp_http_client_fetch_headers(client);
         int total_read_len = 0, read_len;
@@ -401,23 +406,8 @@ static void http_task(void *pvParameters)
             }
         }
 
-
-        // if (json_root) {
-        //     ESP_LOGI(TAG, "json_root->string:%s,json_root->type=%d,json_root->valuedouble=%f,json_root->valueint=%d,json_root->valuestring=%s", 
-        //     json_root->string,
-        //     json_root->type,
-        //     json_root->valuedouble,
-        //     json_root->valueint,
-        //     json_root->valuestring
-        //     );
-        // }
-   
-
-        
-
         esp_http_client_close(client);
              
-
         vTaskDelay(1000/portTICK_PERIOD_MS);                   
 
 
@@ -948,18 +938,70 @@ void my_demo(void)
 {
     //linemeter_demo();
     //image_demo();
+    create_gui_task_loading();
 }
 
-
+/**
+ * @brief 设置主屏幕样式
+ * 
+ */
 static void my_style(void)
 {
-    static lv_style_t style;
+    
 
     lv_obj_t *obj = lv_scr_act();
 
     lv_style_init(&style);
 
     lv_style_set_bg_color(&style, LV_STATE_DEFAULT, LV_COLOR_BLACK);
+    lv_style_set_value_color(&style, LV_STATE_DEFAULT, LV_COLOR_WHITE);
+    lv_style_set_text_color(&style, LV_STATE_DEFAULT, LV_COLOR_WHITE);
+    lv_style_set_line_color(&style, LV_STATE_DEFAULT, LV_COLOR_WHITE);
 
     lv_obj_add_style(obj, LV_OBJ_PART_MAIN, &style);
+}
+
+
+/**
+ * @brief 连接wifi->连接http server，这两个步骤，用gui显示出来
+ *          用信号量来判断进度
+ * 
+ */
+static void create_gui_task_loading(void)
+{
+    /*Create a spinner*/
+    lv_obj_t * spinner = lv_spinner_create(lv_scr_act(), NULL);
+    lv_obj_set_size(spinner, 100, 100);
+    lv_obj_align(spinner, NULL, LV_ALIGN_CENTER, 0, 0);
+
+    //lv_spinner_set_arc_length(spinner, 100);
+    //lv_spinner_set_spin_time(spinner, 1500);
+
+    lv_spinner_set_type(spinner, LV_SPINNER_TYPE_FILLSPIN_ARC);
+
+    lv_spinner_set_dir(spinner, LV_SPINNER_DIR_BACKWARD);
+
+    lv_obj_t *label = lv_label_create(lv_scr_act(), NULL);
+    lv_label_set_text(label, "connect wifi...");
+
+    lv_obj_add_style(label, LV_OBJ_PART_MAIN, &style);
+    lv_obj_add_style(spinner, LV_OBJ_PART_MAIN, &style);
+
+
+    /**
+     * @brief 
+     *     LV_SPINNER_TYPE_SPINNING_ARC,
+    LV_SPINNER_TYPE_FILLSPIN_ARC,
+    LV_SPINNER_TYPE_CONSTANT_ARC,
+     * 
+     */
+}
+
+/**
+ * @brief 创建主gui图标，用于显示温度
+ * 
+ */
+static void create_gui_task_main(void)
+{
+
 }
