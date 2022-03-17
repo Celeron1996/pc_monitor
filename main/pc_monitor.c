@@ -936,9 +936,9 @@ void image_demo(void)
 }
 void my_demo(void)
 {
-    //linemeter_demo();
+    linemeter_demo();
     //image_demo();
-    create_gui_task_loading();
+    //create_gui_task_loading();
 }
 
 /**
@@ -949,16 +949,16 @@ static void my_style(void)
 {
     
 
-    lv_obj_t *obj = lv_scr_act();
+    // lv_obj_t *obj = lv_scr_act();
 
-    lv_style_init(&style_main);
+    // lv_style_init(&style_main);
 
-    lv_style_set_bg_color(&style_main, LV_STATE_DEFAULT, LV_COLOR_BLACK);
-    lv_style_set_value_color(&style_main, LV_STATE_DEFAULT, LV_COLOR_WHITE);
-    lv_style_set_text_color(&style_main, LV_STATE_DEFAULT, LV_COLOR_WHITE);
-    lv_style_set_line_color(&style_main, LV_STATE_DEFAULT, LV_COLOR_WHITE);
+    // lv_style_set_bg_color(&style_main, LV_STATE_DEFAULT, LV_COLOR_BLACK);
+    // lv_style_set_value_color(&style_main, LV_STATE_DEFAULT, LV_COLOR_BLACK);
+    // lv_style_set_text_color(&style_main, LV_STATE_DEFAULT, LV_COLOR_WHITE);
+    // lv_style_set_line_color(&style_main, LV_STATE_DEFAULT, LV_COLOR_BLACK);
 
-    lv_obj_add_style(obj, LV_OBJ_PART_MAIN, &style_main);
+    // lv_obj_add_style(obj, LV_OBJ_PART_MAIN, &style_main);
 }
 
 
@@ -969,34 +969,27 @@ static void my_style(void)
  */
 static void create_gui_task_loading(void)
 {
+     lv_style_t style_spinner;
+     lv_style_init(&style_spinner);
+
+    lv_style_set_line_width(&style_spinner, LV_STATE_DEFAULT, 10);
+    lv_style_set_border_width(&style_spinner, LV_STATE_DEFAULT, 10);
+
     /*Create a spinner*/
     lv_obj_t * spinner = lv_spinner_create(lv_scr_act(), NULL);
+    lv_obj_t *label = lv_label_create(lv_scr_act(), NULL);
+
+    //lv_obj_add_style(spinner, LV_OBJ_PART_ALL, &style_spinner);
+
     lv_obj_set_size(spinner, 100, 100);
     lv_obj_align(spinner, NULL, LV_ALIGN_CENTER, 0, 0);
-
-    //lv_spinner_set_arc_length(spinner, 100);
-    //lv_spinner_set_spin_time(spinner, 1500);
-
     lv_spinner_set_type(spinner, LV_SPINNER_TYPE_FILLSPIN_ARC);
 
-    lv_spinner_set_dir(spinner, LV_SPINNER_DIR_BACKWARD);
 
-    lv_obj_t *label = lv_label_create(lv_scr_act(), NULL);
-    lv_label_set_recolor(label, true);
-    lv_label_set_text(label, "#ff0000 hello# #00ff00 world# #0000ff fuck");
+    lv_obj_align(label, NULL, LV_ALIGN_IN_BOTTOM_MID, -50, 0);
+    lv_label_set_text(label, "connecting wifi...");
 
 
-    lv_obj_add_style(label, LV_OBJ_PART_MAIN, &style_main);
-    lv_obj_add_style(spinner, LV_OBJ_PART_MAIN, &style_main);
-
-
-    /**
-     * @brief 
-     *     LV_SPINNER_TYPE_SPINNING_ARC,
-    LV_SPINNER_TYPE_FILLSPIN_ARC,
-    LV_SPINNER_TYPE_CONSTANT_ARC,
-     * 
-     */
 }
 
 /**
