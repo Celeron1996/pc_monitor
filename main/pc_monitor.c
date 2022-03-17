@@ -123,7 +123,7 @@ static char URL[64] = {0};  /*统一资源定位链接，当PC端生成了http s
 
 static const char *TAG = "pc_monitor";
 
-static lv_style_t style;    /*全局样式*/
+static lv_style_t style_main;    /*全局样式*/
 
 /**
  * @brief 应用主函数
@@ -951,14 +951,14 @@ static void my_style(void)
 
     lv_obj_t *obj = lv_scr_act();
 
-    lv_style_init(&style);
+    lv_style_init(&style_main);
 
-    lv_style_set_bg_color(&style, LV_STATE_DEFAULT, LV_COLOR_BLACK);
-    lv_style_set_value_color(&style, LV_STATE_DEFAULT, LV_COLOR_WHITE);
-    lv_style_set_text_color(&style, LV_STATE_DEFAULT, LV_COLOR_WHITE);
-    lv_style_set_line_color(&style, LV_STATE_DEFAULT, LV_COLOR_WHITE);
+    lv_style_set_bg_color(&style_main, LV_STATE_DEFAULT, LV_COLOR_BLACK);
+    lv_style_set_value_color(&style_main, LV_STATE_DEFAULT, LV_COLOR_WHITE);
+    lv_style_set_text_color(&style_main, LV_STATE_DEFAULT, LV_COLOR_WHITE);
+    lv_style_set_line_color(&style_main, LV_STATE_DEFAULT, LV_COLOR_WHITE);
 
-    lv_obj_add_style(obj, LV_OBJ_PART_MAIN, &style);
+    lv_obj_add_style(obj, LV_OBJ_PART_MAIN, &style_main);
 }
 
 
@@ -982,10 +982,12 @@ static void create_gui_task_loading(void)
     lv_spinner_set_dir(spinner, LV_SPINNER_DIR_BACKWARD);
 
     lv_obj_t *label = lv_label_create(lv_scr_act(), NULL);
-    lv_label_set_text(label, "connect wifi...");
+    lv_label_set_recolor(label, true);
+    lv_label_set_text(label, "#ff0000 hello# #00ff00 world# #0000ff fuck");
 
-    lv_obj_add_style(label, LV_OBJ_PART_MAIN, &style);
-    lv_obj_add_style(spinner, LV_OBJ_PART_MAIN, &style);
+
+    lv_obj_add_style(label, LV_OBJ_PART_MAIN, &style_main);
+    lv_obj_add_style(spinner, LV_OBJ_PART_MAIN, &style_main);
 
 
     /**
