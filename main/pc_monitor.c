@@ -69,6 +69,7 @@ static void guiTask(void *pvParameter);
 static void create_demo_application(void);
 static void my_style(void);
 static void create_gui_task_loading(void);
+static void gui_task_main(void *pvParameters);
 
 /**
  * @brief 创建一个信号量来处理lvgl的并发调用，如果想从其他多个线程/任务调用lvgl
@@ -123,7 +124,6 @@ static char URL[64] = {0};  /*统一资源定位链接，当PC端生成了http s
 
 static const char *TAG = "pc_monitor";
 
-static lv_style_t style_main;    /*全局样式*/
 
 /**
  * @brief 应用主函数
@@ -923,7 +923,7 @@ void linemeter_demo(void)
     lv_label_set_text(label1, "Hello World");
     lv_obj_align(label1, NULL, LV_ALIGN_CENTER, 0, 0);
 
-    xTaskCreate(my_demo_task, "my_demo_task", 2048, (void*)NULL, 0, NULL);
+    xTaskCreate(my_demo_task, "my_demo_task", 1024*10, (void*)NULL, 0, NULL);
 }
 
 void image_demo(void)
@@ -936,9 +936,11 @@ void image_demo(void)
 }
 void my_demo(void)
 {
-    linemeter_demo();
+    //linemeter_demo();
     //image_demo();
     //create_gui_task_loading();
+
+    gui_task_main(NULL);
 }
 
 /**
@@ -999,4 +1001,47 @@ static void create_gui_task_loading(void)
 static void create_gui_task_main(void)
 {
 
+}
+
+
+/**
+ * @brief 
+ * 
+ */
+static void gui_task_main(void *pvParameters)
+{
+    /* 设置表盘样式 */
+    static lv_style_t style_lmeter;
+    lv_style_init(&style_lmeter);
+    lv_style_set_line_width(&style_lmeter, LV_STATE_DEFAULT, 4);    /*设置表盘小于value的刻度宽度*/
+    lv_style_set_scale_end_line_width(&style_lmeter, LV_STATE_DEFAULT, 4);    /*设置表盘大于value的刻度宽度*/
+    lv_style_set_scale_width(&style_lmeter, LV_STATE_DEFAULT, 16);  /*设置全部刻度线的长度*/
+    
+    /* 创建CPU 表盘 */
+    lv_obj_t *lmeter_cpu = lv_linemeter_create(lv_scr_act(), NULL);
+    lv_linemeter_set_range(lmeter_cpu, 0, 100);                   /*Set the range*/
+    lv_linemeter_set_value(lmeter_cpu, 80);                       /*Set the current value*/
+    lv_linemeter_set_scale(lmeter_cpu, 280, 100);                  /*Set the angle and number of lines*/
+    lv_obj_set_size(lmeter_cpu, 120, 120);
+    lv_obj_align(lmeter_cpu, NULL, LV_ALIGN_IN_TOP_LEFT, 0, 0);
+
+    lv_obj_t *label_cpu_title = lv_label_create(lmeter_cpu, NULL);
+    lv_label_set_text(label_cpu_title, "cpu");
+    lv_obj_align(label_cpu_title, NULL, LV_ALIGN_IN_BOTTOM_MID, 0, -16);
+
+    lv_obj_add_style(lmeter_cpu, LV_OBJ_PART_MAIN, &style_lmeter);
+
+    /* 创建GPU 表盘 */
+    lv_obj_t *lmeter_gpu = lv_linemeter_create(lv_scr_act(), NULL);
+    lv_linemeter_set_range(lmeter_gpu, 0, 100);                   /*Set the range*/
+    lv_linemeter_set_value(lmeter_gpu, 80);                       /*Set the current value*/
+    lv_linemeter_set_scale(lmeter_gpu, 280, 100);                  /*Set the angle and number of lines*/
+    lv_obj_set_size(lmeter_gpu, 120, 120);
+    lv_obj_align(lmeter_gpu, NULL, LV_ALIGN_IN_TOP_RIGHT, 0, 0);
+
+    lv_obj_t *label_gpu_title = lv_label_create(lmeter_gpu, NULL);
+    lv_label_set_text(label_gpu_title, "gpu");
+    lv_obj_align(label_gpu_title, NULL, LV_ALIGN_IN_BOTTOM_MID, 0, -16);
+
+    lv_obj_add_style(lmeter_gpu, LV_OBJ_PART_MAIN, &style_lmeter);
 }
