@@ -32,6 +32,8 @@
 
 #include "cJSON.h"
 
+#include "pc.h"
+
 /* Littlevgl specific */
 #ifdef LV_LVGL_H_INCLUDE_SIMPLE
 #include "lvgl.h"
@@ -153,11 +155,11 @@ void app_main(void)
 
     vTaskDelay(pdMS_TO_TICKS(3000));
 
-    xTaskCreate(wifi_task, "wifi_task", 8192, (void*)NULL, 1, NULL);
+    xTaskCreate(wifi_task, "wifi_task", 8192, (void*)NULL, 2, NULL);
 
-    xTaskCreate(http_task, "http_task", 8192, (void*)NULL, 1, NULL);
+    xTaskCreate(http_task, "http_task", 8192, (void*)NULL, 3, NULL);
 
-	vTaskDelay(3000 / portTICK_RATE_MS);
+	//xTaskCreate(gui_task_main, "gui_task_main", 8192, (void*)NULL, 1, NULL);
 
 	while (1) {
 		 vTaskDelay(500 / portTICK_RATE_MS);
@@ -376,48 +378,60 @@ static void http_task(void *pvParameters)
                         esp_http_client_get_status_code(client),
                         esp_http_client_get_content_length(client));
 
- 
-
-        cJSON *json_root = NULL;
-        cJSON *json_children;
-        int children_size;
-        json_root = cJSON_Parse(buffer);
-        json_children = cJSON_GetObjectItem(json_root, "Children");
-        children_size = cJSON_GetArraySize(json_children);
-        for (int i = 0; i < children_size; i++) {
-            cJSON *item;
-            item = cJSON_GetArrayItem(json_children, i);
-            if (cJSON_GetArraySize(item) <= 1) {
-                cJSON_Delete(item);   
-            }
-            else {
-                cJSON *host_name = cJSON_GetObjectItem(item, "Text");
-                cJSON *sensors = cJSON_GetObjectItem(item, "Children");
-                cJSON *cpu = cJSON_GetArrayItem(sensors, 1);
-                cJSON *cpu_name = cJSON_GetObjectItem(cpu, "Text");
-                cJSON *cpu_sensor = cJSON_GetObjectItem(cpu, "Children");
-                cJSON *cpu_temperature = cJSON_GetArrayItem(cpu_sensor, 1);
-                cJSON *cpu_temper_children = cJSON_GetObjectItem(cpu_temperature, "Children");
-                cJSON *cpu_temper_package = cJSON_GetArrayItem(cpu_temper_children, 4);
-                cJSON *cpu_temper_package_value = cJSON_GetObjectItem(cpu_temper_package, "Value");
-
-                ESP_LOGI(TAG, "host name = %s, cpu name = %s, cpu tempera = %s", host_name->valuestring, cpu_name->valuestring, cpu_temper_package_value->valuestring);
-
-            }
+        //pc_analysis_json(buffer);
+        ////////////////////////////////////////////////
+    cJSON *json_root = NULL;
+    cJSON *json_children;
+    int children_size;
+    json_root = cJSON_Parse(buffer);
+    if (json_root == NULL)
+    {
+        ESP_LOGE(TAG, "json_root NULL");
+        ESP_LOGI(TAG, "%s", (char *)buffer);
+    }
+        
+    json_children = cJSON_GetObjectItem(json_root, "Children");
+    children_size = cJSON_GetArraySize(json_children);
+    ESP_LOGI(TAG, "children_size = %d", children_size);
+    for (int i = 0; i < children_size; i++) {
+        cJSON *item;
+        item = cJSON_GetArrayItem(json_children, i);
+        ESP_LOGI(TAG, "for i = %d", i);
+        if (cJSON_GetArraySize(item) <= 1) {
+            cJSON_Delete(item);
+            ESP_LOGI(TAG, "if true");
         }
+        else {
+            cJSON *host_name = cJSON_GetObjectItem(item, "Text");
+            cJSON *sensors = cJSON_GetObjectItem(item, "Children");
+            cJSON *cpu = cJSON_GetArrayItem(sensors, 1);
+            cJSON *cpu_name = cJSON_GetObjectItem(cpu, "Text");
+            cJSON *cpu_sensor = cJSON_GetObjectItem(cpu, "Children");
+            cJSON *cpu_temperature = cJSON_GetArrayItem(cpu_sensor, 1);
+            cJSON *cpu_temper_children = cJSON_GetObjectItem(cpu_temperature, "Children");
+            cJSON *cpu_temper_package = cJSON_GetArrayItem(cpu_temper_children, 4);//
+            cJSON *cpu_temper_package_value = cJSON_GetObjectItem(cpu_temper_package, "Value");
+
+            ESP_LOGI(TAG, "host name = %s, cpu name = %s, cpu tempera = %s", host_name->valuestring, cpu_name->valuestring, cpu_temper_package_value->valuestring);
+
+            // memcpy(_pc_name, host_name->valuestring, strlen(host_name->valuestring));/*获取主机名字*/
+            // memcpy(_cpu_name, cpu_name->valuestring, strlen(cpu_name->valuestring));/*获取cpu名字*/
+            
+            // _cpu_temperature = cpu_temper_package_value->valueint;
+
+        }
+    }
+
+    //cJSON_Delete(json_children);
+    cJSON_Delete(json_root);
+    /////////////////////////////////////////////////////
 
         esp_http_client_close(client);
              
-        vTaskDelay(1000/portTICK_PERIOD_MS);                   
-
-
-        cJSON_Delete(json_root);    
+        vTaskDelay(1000/portTICK_PERIOD_MS);
     }
 
     esp_http_client_cleanup(client);   
-
-
-
 
     free(buffer);
     ESP_LOGI(TAG, "Finish http example");
@@ -940,7 +954,7 @@ void my_demo(void)
     //image_demo();
     //create_gui_task_loading();
 
-    gui_task_main(NULL);
+    //gui_task_main(NULL);
 }
 
 /**
@@ -1044,4 +1058,10 @@ static void gui_task_main(void *pvParameters)
     lv_obj_align(label_gpu_title, NULL, LV_ALIGN_IN_BOTTOM_MID, 0, -16);
 
     lv_obj_add_style(lmeter_gpu, LV_OBJ_PART_MAIN, &style_lmeter);
+
+    while (true)
+    {
+        //lv_linemeter_set_value(lmeter_cpu, pc_get_cpu_temperature());
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
 }

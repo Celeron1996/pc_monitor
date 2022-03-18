@@ -2,7 +2,7 @@
 #define PC_H
 
 
-void pc_init(const char *url);
-char *const pc_get_json(void);
+void pc_analysis_json(void *pJson);
+int pc_get_cpu_temperature(void);
 
 #endif
