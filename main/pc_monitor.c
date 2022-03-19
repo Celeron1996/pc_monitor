@@ -126,6 +126,9 @@ static char URL[64] = {0};  /*统一资源定位链接，当PC端生成了http s
 
 static const char *TAG = "pc_monitor";
 
+/*-------------------------------- my custom -------------------------------------*/
+#define MY_COLOR_SKYBLUE    LV_COLOR_MAKE(135, 206, 235)
+#define MY_COLOR_BACKBLACK    LV_COLOR_MAKE(233, 233, 233)
 
 /**
  * @brief 应用主函数
@@ -982,11 +985,15 @@ static void gui_task_main(void *pvParameters)
     int gpu_temper = 0;
 
     /* 设置表盘样式 */
-    static lv_style_t style_lmeter;
-    lv_style_init(&style_lmeter);
-    lv_style_set_line_width(&style_lmeter, LV_STATE_DEFAULT, 4);    /*设置表盘小于value的刻度宽度*/
-    lv_style_set_scale_end_line_width(&style_lmeter, LV_STATE_DEFAULT, 4);    /*设置表盘大于value的刻度宽度*/
-    lv_style_set_scale_width(&style_lmeter, LV_STATE_DEFAULT, 16);  /*设置全部刻度线的长度*/
+    static lv_style_t style_cpu_lmeter;
+    static lv_style_t style_gpu_lmeter;
+    lv_style_init(&style_cpu_lmeter);
+    lv_style_set_line_width(&style_cpu_lmeter, LV_STATE_DEFAULT, 4);    /*设置表盘小于value的刻度宽度*/
+    lv_style_set_scale_end_line_width(&style_cpu_lmeter, LV_STATE_DEFAULT, 4);    /*设置表盘大于value的刻度宽度*/
+    lv_style_set_scale_width(&style_cpu_lmeter, LV_STATE_DEFAULT, 16);  /*设置全部刻度线的长度*/
+    lv_style_set_line_color(&style_cpu_lmeter, LV_STATE_DEFAULT, MY_COLOR_SKYBLUE);/*设置刻度小于value部分刻度线的颜色*/
+    lv_style_set_scale_end_color(&style_cpu_lmeter, LV_STATE_DEFAULT, MY_COLOR_BACKBLACK);/*设置刻度大于value部分刻度线的颜色*/
+    lv_style_copy(&style_gpu_lmeter, &style_cpu_lmeter);
     
     /* 创建CPU 表盘 */
     lv_obj_t *lmeter_cpu = lv_linemeter_create(lv_scr_act(), NULL);
@@ -997,14 +1004,14 @@ static void gui_task_main(void *pvParameters)
     lv_obj_align(lmeter_cpu, NULL, LV_ALIGN_IN_TOP_LEFT, 0, 0);
 
     lv_obj_t *label_cpu_title = lv_label_create(lmeter_cpu, NULL);
-    lv_label_set_text(label_cpu_title, "cpu");
+    lv_label_set_text(label_cpu_title, "CPU");
     lv_obj_align(label_cpu_title, NULL, LV_ALIGN_IN_BOTTOM_MID, 0, -16);
     
     lv_obj_t *label_cpu_temper = lv_label_create(lmeter_cpu, NULL);
     lv_label_set_text_fmt(label_cpu_temper, "%d°C", cpu_temper);
     lv_obj_align(label_cpu_temper, NULL, LV_ALIGN_CENTER, 0, 0);
 
-    lv_obj_add_style(lmeter_cpu, LV_OBJ_PART_MAIN, &style_lmeter);
+    lv_obj_add_style(lmeter_cpu, LV_OBJ_PART_MAIN, &style_cpu_lmeter);
 
     /* 创建GPU 表盘 */
     lv_obj_t *lmeter_gpu = lv_linemeter_create(lv_scr_act(), NULL);
@@ -1015,22 +1022,21 @@ static void gui_task_main(void *pvParameters)
     lv_obj_align(lmeter_gpu, NULL, LV_ALIGN_IN_TOP_RIGHT, 0, 0);
 
     lv_obj_t *label_gpu_title = lv_label_create(lmeter_gpu, NULL);
-    lv_label_set_text(label_gpu_title, "gpu");
+    lv_label_set_text(label_gpu_title, "GPU");
     lv_obj_align(label_gpu_title, NULL, LV_ALIGN_IN_BOTTOM_MID, 0, -16);
 
     lv_obj_t *label_gpu_temper = lv_label_create(lmeter_gpu, NULL);
     lv_label_set_text_fmt(label_gpu_temper, "%d°C", gpu_temper);
     lv_obj_align(label_gpu_temper, NULL, LV_ALIGN_CENTER, 0, 0);
 
-    lv_obj_add_style(lmeter_gpu, LV_OBJ_PART_MAIN, &style_lmeter);
+    lv_obj_add_style(lmeter_gpu, LV_OBJ_PART_MAIN, &style_gpu_lmeter);
 
     while (true)
     {
+        /*refresh cpu temperature*/
         cpu_temper = pc_get_cpu_temperature();
         lv_linemeter_set_value(lmeter_cpu, cpu_temper);
         lv_label_set_text_fmt(label_cpu_temper, "%d°C", cpu_temper);
-
-
 
         ESP_LOGI(TAG, "cpu temperature = %d", cpu_temper);
         vTaskDelay(pdMS_TO_TICKS(1000));
