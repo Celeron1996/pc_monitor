@@ -80,11 +80,15 @@ void pc_analysis_json(void *pJson)
             cJSON *cpu_temper_package = cJSON_GetArrayItem(cpu_temper_children, 4);//
             cJSON *cpu_temper_package_value = cJSON_GetObjectItem(cpu_temper_package, "Value");
 
-            ESP_LOGI(TAG, "host name = %s, cpu name = %s, cpu tempera = %s", host_name->valuestring, cpu_name->valuestring, cpu_temper_package_value->valuestring);
 
-            memcpy(_pc_name_str, host_name->valuestring, strlen(host_name->valuestring));/*获取主机名字*/
-            memcpy(_cpu_name_str, cpu_name->valuestring, strlen(cpu_name->valuestring));/*获取cpu名字*/
-            memcpy(_cpu_temperature_str, cpu_temper_package_value->valuestring, strlen(cpu_temper_package_value->valuestring));/*获取cpu温度*/
+            memcpy(_pc_name_str, host_name->valuestring,
+                    strlen(host_name->valuestring)>sizeof(_pc_name_str)?sizeof(_pc_name_str):strlen(host_name->valuestring));/*获取主机名字*/
+
+            memcpy(_cpu_name_str, cpu_name->valuestring,
+                    strlen(cpu_name->valuestring)>sizeof(_cpu_name_str)?sizeof(_pc_name_str):strlen(cpu_name->valuestring));/*获取cpu名字*/
+                    
+            memcpy(_cpu_temperature_str, cpu_temper_package_value->valuestring,
+                    strlen(cpu_temper_package_value->valuestring)>sizeof(_cpu_temperature_str)?sizeof(_cpu_temperature_str):strlen(cpu_temper_package_value->valuestring));/*获取cpu温度*/
 
         }
     }
