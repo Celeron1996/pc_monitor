@@ -5,6 +5,7 @@
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
 #include "freertos/portmacro.h"
+#include "freertos/semphr.h"
 #include "esp_system.h"
 #include "driver/spi_master.h"
 #include "driver/gpio.h"
@@ -43,9 +44,20 @@ static int pc_str_to_int(char *pStr);
 
 static char _pc_name_str[64];
 static char _cpu_name_str[64];
-static char _cpu_temperature_str[16];
 static char _gpu_name_str[64];
-static char _gpu_temperature_str[16];
+
+static int _gpu_temperature = 0;
+static int _cpu_temperature = 0;
+
+
+/**
+ * @brief 初始化
+ * 
+ */
+void pc_init(void)
+{
+
+}
 
 
 /**
@@ -54,6 +66,8 @@ static char _gpu_temperature_str[16];
  */
 void pc_analysis_json(void *pJson)
 {
+    taskENTER_CRITICAL(0);
+
     cJSON *json_root = cJSON_Parse(pJson);
     if (json_root == NULL)
     {
@@ -86,14 +100,17 @@ void pc_analysis_json(void *pJson)
 
             memcpy(_cpu_name_str, cpu_name->valuestring,
                     strlen(cpu_name->valuestring)>sizeof(_cpu_name_str)?sizeof(_pc_name_str):strlen(cpu_name->valuestring));/*获取cpu名字*/
-                    
-            memcpy(_cpu_temperature_str, cpu_temper_package_value->valuestring,
-                    strlen(cpu_temper_package_value->valuestring)>sizeof(_cpu_temperature_str)?sizeof(_cpu_temperature_str):strlen(cpu_temper_package_value->valuestring));/*获取cpu温度*/
 
+            // memcpy(_cpu_temperature_str, cpu_temper_package_value->valuestring,
+            //         strlen(cpu_temper_package_value->valuestring)>sizeof(_cpu_temperature_str)?sizeof(_cpu_temperature_str):strlen(cpu_temper_package_value->valuestring));/*获取cpu温度*/
+
+            _cpu_temperature = pc_str_to_int(cpu_temper_package_value->valuestring);
         }
     }
 
     cJSON_Delete(json_root);
+
+    taskEXIT_CRITICAL(0);
 }
 
 
@@ -103,7 +120,7 @@ void pc_analysis_json(void *pJson)
  */
 int pc_get_cpu_temperature(void)
 {
-    return pc_str_to_int(_cpu_temperature_str);
+    return _cpu_temperature;
 }
 
 

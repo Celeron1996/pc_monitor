@@ -154,6 +154,8 @@ void app_main(void)
 
 	button_init();
 
+    pc_init();
+
     xTaskCreatePinnedToCore(guiTask, "guiTask", 4*1024, (void*)NULL, 0, NULL, 1);
 
     vTaskDelay(pdMS_TO_TICKS(3000));
@@ -162,7 +164,7 @@ void app_main(void)
 
     xTaskCreate(http_task, "http_task", 4*1024, (void*)NULL, 3, NULL);
 
-	xTaskCreate(gui_task_main, "gui_task_main", 2*1024, (void*)NULL, 1, NULL);
+	xTaskCreate(gui_task_main, "gui_task_main", 4*1024, (void*)NULL, 1, NULL);
 
 	while (1) {
 		 vTaskDelay(500 / portTICK_RATE_MS);
