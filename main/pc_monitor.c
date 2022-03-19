@@ -387,7 +387,7 @@ static void http_task(void *pvParameters)
 
         esp_http_client_close(client);
              
-        vTaskDelay(1000/portTICK_PERIOD_MS);
+        vTaskDelay(pdMS_TO_TICKS(2500));
     }
 
     esp_http_client_cleanup(client);   
@@ -1040,7 +1040,6 @@ static void gui_task_main(void *pvParameters)
         lv_linemeter_set_value(lmeter_cpu, cpu_temper);
         lv_label_set_text_fmt(label_cpu_temper, "%d°C", cpu_temper);
 
-        ESP_LOGI(TAG, "cpu temperature = %d", cpu_temper);
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
