@@ -66,7 +66,7 @@ void pc_init(void)
  */
 void pc_analysis_json(void *pJson)
 {
-    taskENTER_CRITICAL(0);
+    //taskENTER_CRITICAL(0);
 
     // cJSON *json_root = cJSON_Parse(pJson);
     // if (json_root == NULL)
@@ -101,6 +101,8 @@ void pc_analysis_json(void *pJson)
     //                 strlen(cpu_name->valuestring)>sizeof(_cpu_name_str)?sizeof(_pc_name_str):strlen(cpu_name->valuestring));/*获取cpu名字*/
 
     //         _cpu_temperature = pc_str_to_int(cpu_temper_package_value->valuestring);
+
+    //         ESP_LOGI(TAG, "children_size = %d, i = %d, name = %s", children_size, i, _pc_name_str);
     //     }
     // }
 
@@ -108,44 +110,42 @@ void pc_analysis_json(void *pJson)
 
     /*-------------------------------------begin---------------------------------------------------*/
     cJSON *root = cJSON_Parse(pJson);
-    cJSON *pc = cJSON_GetObjectItem(root, "Children");
-    cJSON *pc_ = cJSON_GetArrayItem(pc, 0);
-    cJSON *pc_name = cJSON_GetObjectItem(pc_, "Text");
+    cJSON *children = cJSON_GetObjectItem(root, "Children");
+    cJSON *pc = cJSON_GetArrayItem(children, 0);
+    cJSON *pc_name = cJSON_GetObjectItem(pc, "Text");
     ESP_LOGI(TAG, "pc name = %s", pc_name->valuestring);
-    // cJSON *pc_sensors = cJSON_GetObjectItem(pc, "Children");
-    // int sensor_count = cJSON_GetArraySize(pc_sensors);
-    // for (int i = 0 ; i < sensor_count; i++)
-    // {
-    //     cJSON *cpu = cJSON_GetArrayItem(pc_sensors, i);
-    //     cJSON *cpu_image = cJSON_GetObjectItem(cpu, "Image_URL");
-    //     if ((cpu_image != NULL) && (strcmp(cpu_image->valuestring, "images_icon/cpu.png") == 0))
-    //     {
-    //         ESP_LOGI(TAG, "if cpu_image = %d", i);
-    //         cJSON *cpu_name = cJSON_GetObjectItem(cpu, "Text");
-    //         cJSON *cpu_aattributes = cJSON_GetObjectItem(cpu, "Children");
-    //         int cpu_aattributes_count = cJSON_GetArraySize(cpu_aattributes);
-    //         for (int x = 0; x < cpu_aattributes_count; x++)
-    //         {
-    //             cJSON *cpu_temperatures = cJSON_GetArrayItem(cpu_aattributes, x);
-    //             cJSON *cpu_temperatures_text = cJSON_GetObjectItem(cpu_temperatures, "Text");
-    //             if ((cpu_temperatures_text != NULL) && (strcmp(cpu_temperatures_text->valuestring, "Temperatures") == 0))
-    //             {
-    //                 ESP_LOGI(TAG, "if temper = %d", x);
-    //                 cJSON *cpu_items = cJSON_GetObjectItem(cpu_temperatures, "Children");
-    //                 int cpu_items_count = cJSON_GetArraySize(cpu_items);
-    //                 cJSON *cpu_package = cJSON_GetArrayItem(cpu_items, cpu_items_count - 1);
-    //                 cJSON *cpu_package_temperature = cJSON_GetObjectItem(cpu_package, "Value");
-    //                 ESP_LOGI(TAG, "cpu temperature:%s", cpu_package_temperature->valuestring);
-    //             }
-    //         }
-    //     }
-    // }
+    cJSON *pc_sensors = cJSON_GetObjectItem(pc, "Children");
+    int sensor_count = cJSON_GetArraySize(pc_sensors);
+    for (int i = 0 ; i < sensor_count; i++)
+    {
+        cJSON *cpu = cJSON_GetArrayItem(pc_sensors, i);
+        cJSON *cpu_image = cJSON_GetObjectItem(cpu, "ImageURL");
+        if ((cpu_image != NULL) && (strcmp(cpu_image->valuestring, "images_icon/cpu.png") == 0))
+        {
+            cJSON *cpu_name = cJSON_GetObjectItem(cpu, "Text");
+            cJSON *cpu_aattributes = cJSON_GetObjectItem(cpu, "Children");
+            int cpu_aattributes_count = cJSON_GetArraySize(cpu_aattributes);
+            for (int x = 0; x < cpu_aattributes_count; x++)
+            {
+                cJSON *cpu_temperatures = cJSON_GetArrayItem(cpu_aattributes, x);
+                cJSON *cpu_temperatures_text = cJSON_GetObjectItem(cpu_temperatures, "Text");
+                if ((cpu_temperatures_text != NULL) && (strcmp(cpu_temperatures_text->valuestring, "Temperatures") == 0))
+                {
+                    cJSON *cpu_items = cJSON_GetObjectItem(cpu_temperatures, "Children");
+                    int cpu_items_count = cJSON_GetArraySize(cpu_items);
+                    cJSON *cpu_package = cJSON_GetArrayItem(cpu_items, cpu_items_count - 1);
+                    cJSON *cpu_package_temperature = cJSON_GetObjectItem(cpu_package, "Value");
+                    ESP_LOGI(TAG, "cpu temperature:%s", cpu_package_temperature->valuestring);
+                }
+            }
+        }
+    }
 
     cJSON_Delete(root);
 
     /*-------------------------------------end---------------------------------------------------*/
 
-    taskEXIT_CRITICAL(0);
+    //taskEXIT_CRITICAL(0);
 }
 
 
