@@ -39,6 +39,7 @@
 
 static char *TAG = "PC";
 
+static int pc_str_to_int(char *pStr);
 
 static char _pc_name_str[64];
 static char _cpu_name_str[64];
@@ -98,22 +99,29 @@ void pc_analysis_json(void *pJson)
  */
 int pc_get_cpu_temperature(void)
 {
+    return pc_str_to_int(_cpu_temperature_str);
+}
+
+
+
+/**
+ * @brief 字符串转整数
+ * @param   pStr:字符串指针
+ * @return 整数
+ */
+static int pc_str_to_int(char *pStr)
+{
     int index = 0;
     int result = 0;
 
-    while (_cpu_temperature_str[index] != '\0')
+    while (pStr[index] != '\0')
     {
-        if (_cpu_temperature_str[index] > '0' && _cpu_temperature_str[index] <= '9')
+        if (pStr[index] > '0' && pStr[index] <= '9')
         {
-            result = result * 10 + (_cpu_temperature_str[index] - '0');
+            result = result * 10 + (pStr[index] - '0');
         }
         index++;
     }
 
     return result;
 }
-
-
-
-
-
