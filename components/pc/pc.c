@@ -40,11 +40,11 @@
 static char *TAG = "PC";
 
 
-static char _pc_name[64];
-static char _cpu_name[64];
-static int _cpu_temperature = 0;
-static char _gpu_name[64];
-static int _gpu_temperature = 0;
+static char _pc_name_str[64];
+static char _cpu_name_str[64];
+static char _cpu_temperature_str[16];
+static char _gpu_name_str[64];
+static char _gpu_temperature_str[16];
 
 
 /**
@@ -53,26 +53,20 @@ static int _gpu_temperature = 0;
  */
 void pc_analysis_json(void *pJson)
 {
-    cJSON *json_root = NULL;
-    cJSON *json_children;
-    int children_size;
-    json_root = cJSON_Parse(pJson);
+    cJSON *json_root = cJSON_Parse(pJson);
     if (json_root == NULL)
     {
         ESP_LOGE(TAG, "json_root NULL");
-        ESP_LOGI(TAG, "%s", (char *)pJson);
     }
         
-    json_children = cJSON_GetObjectItem(json_root, "Children");
-    children_size = cJSON_GetArraySize(json_children);
-    ESP_LOGI(TAG, "children_size = %d", children_size);
+    cJSON *json_children = cJSON_GetObjectItem(json_root, "Children");
+    int children_size = cJSON_GetArraySize(json_children);
+    
     for (int i = 0; i < children_size; i++) {
         cJSON *item;
         item = cJSON_GetArrayItem(json_children, i);
-        ESP_LOGI(TAG, "for i = %d", i);
         if (cJSON_GetArraySize(item) <= 1) {
             cJSON_Delete(item);
-            ESP_LOGI(TAG, "if true");
         }
         else {
             cJSON *host_name = cJSON_GetObjectItem(item, "Text");
@@ -87,17 +81,14 @@ void pc_analysis_json(void *pJson)
 
             ESP_LOGI(TAG, "host name = %s, cpu name = %s, cpu tempera = %s", host_name->valuestring, cpu_name->valuestring, cpu_temper_package_value->valuestring);
 
-            // memcpy(_pc_name, host_name->valuestring, strlen(host_name->valuestring));/*获取主机名字*/
-            // memcpy(_cpu_name, cpu_name->valuestring, strlen(cpu_name->valuestring));/*获取cpu名字*/
-            
-            // _cpu_temperature = cpu_temper_package_value->valueint;
+            memcpy(_pc_name_str, host_name->valuestring, strlen(host_name->valuestring));/*获取主机名字*/
+            memcpy(_cpu_name_str, cpu_name->valuestring, strlen(cpu_name->valuestring));/*获取cpu名字*/
+            memcpy(_cpu_temperature_str, cpu_temper_package_value->valuestring, strlen(cpu_temper_package_value->valuestring));/*获取cpu温度*/
 
         }
     }
 
     cJSON_Delete(json_root);
-
-    ESP_LOGI(TAG, "pc return");
 }
 
 
@@ -107,5 +98,22 @@ void pc_analysis_json(void *pJson)
  */
 int pc_get_cpu_temperature(void)
 {
-    return _cpu_temperature;
+    int index = 0;
+    int result = 0;
+
+    while (_cpu_temperature_str[index] != '\0')
+    {
+        if (_cpu_temperature_str[index] > '0' && _cpu_temperature_str[index] <= '9')
+        {
+            result = result * 10 + (_cpu_temperature_str[index] - '0');
+        }
+        index++;
+    }
+
+    return result;
 }
+
+
+
+
+
