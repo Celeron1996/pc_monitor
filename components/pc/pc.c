@@ -68,47 +68,82 @@ void pc_analysis_json(void *pJson)
 {
     taskENTER_CRITICAL(0);
 
-    cJSON *json_root = cJSON_Parse(pJson);
-    if (json_root == NULL)
-    {
-        ESP_LOGE(TAG, "json_root NULL");
-    }
-        
-    cJSON *json_children = cJSON_GetObjectItem(json_root, "Children");
-    int children_size = cJSON_GetArraySize(json_children);
+    // cJSON *json_root = cJSON_Parse(pJson);
+    // if (json_root == NULL)
+    // {
+    //     ESP_LOGE(TAG, "json_root NULL");
+    // }
+
+    // cJSON *json_children = cJSON_GetObjectItem(json_root, "Children");
+    // int children_size = cJSON_GetArraySize(json_children);
     
-    for (int i = 0; i < children_size; i++) {
-        cJSON *item;
-        item = cJSON_GetArrayItem(json_children, i);
-        if (cJSON_GetArraySize(item) <= 1) {
-            cJSON_Delete(item);
-        }
-        else {
-            cJSON *host_name = cJSON_GetObjectItem(item, "Text");
-            cJSON *sensors = cJSON_GetObjectItem(item, "Children");
-            cJSON *cpu = cJSON_GetArrayItem(sensors, 1);
-            cJSON *cpu_name = cJSON_GetObjectItem(cpu, "Text");
-            cJSON *cpu_sensor = cJSON_GetObjectItem(cpu, "Children");
-            cJSON *cpu_temperature = cJSON_GetArrayItem(cpu_sensor, 1);
-            cJSON *cpu_temper_children = cJSON_GetObjectItem(cpu_temperature, "Children");
-            cJSON *cpu_temper_package = cJSON_GetArrayItem(cpu_temper_children, 4);//
-            cJSON *cpu_temper_package_value = cJSON_GetObjectItem(cpu_temper_package, "Value");
+    // for (int i = 0; i < children_size; i++) {
+    //     cJSON *item;
+    //     item = cJSON_GetArrayItem(json_children, i);
+    //     if (cJSON_GetArraySize(item) <= 1) {
+    //         cJSON_Delete(item);
+    //     }
+    //     else {
+    //         cJSON *host_name = cJSON_GetObjectItem(item, "Text");
+    //         cJSON *sensors = cJSON_GetObjectItem(item, "Children");
+    //         cJSON *cpu = cJSON_GetArrayItem(sensors, 1);
+    //         cJSON *cpu_name = cJSON_GetObjectItem(cpu, "Text");
+    //         cJSON *cpu_sensor = cJSON_GetObjectItem(cpu, "Children");
+    //         cJSON *cpu_temperature = cJSON_GetArrayItem(cpu_sensor, 1);
+    //         cJSON *cpu_temper_children = cJSON_GetObjectItem(cpu_temperature, "Children");
+    //         cJSON *cpu_temper_package = cJSON_GetArrayItem(cpu_temper_children, 4);//
+    //         cJSON *cpu_temper_package_value = cJSON_GetObjectItem(cpu_temper_package, "Value");
 
+    //         memcpy(_pc_name_str, host_name->valuestring,
+    //                 strlen(host_name->valuestring)>sizeof(_pc_name_str)?sizeof(_pc_name_str):strlen(host_name->valuestring));/*获取主机名字*/
 
-            memcpy(_pc_name_str, host_name->valuestring,
-                    strlen(host_name->valuestring)>sizeof(_pc_name_str)?sizeof(_pc_name_str):strlen(host_name->valuestring));/*获取主机名字*/
+    //         memcpy(_cpu_name_str, cpu_name->valuestring,
+    //                 strlen(cpu_name->valuestring)>sizeof(_cpu_name_str)?sizeof(_pc_name_str):strlen(cpu_name->valuestring));/*获取cpu名字*/
 
-            memcpy(_cpu_name_str, cpu_name->valuestring,
-                    strlen(cpu_name->valuestring)>sizeof(_cpu_name_str)?sizeof(_pc_name_str):strlen(cpu_name->valuestring));/*获取cpu名字*/
+    //         _cpu_temperature = pc_str_to_int(cpu_temper_package_value->valuestring);
+    //     }
+    // }
 
-            // memcpy(_cpu_temperature_str, cpu_temper_package_value->valuestring,
-            //         strlen(cpu_temper_package_value->valuestring)>sizeof(_cpu_temperature_str)?sizeof(_cpu_temperature_str):strlen(cpu_temper_package_value->valuestring));/*获取cpu温度*/
+    // cJSON_Delete(json_root);
 
-            _cpu_temperature = pc_str_to_int(cpu_temper_package_value->valuestring);
-        }
-    }
+    /*-------------------------------------begin---------------------------------------------------*/
+    cJSON *root = cJSON_Parse(pJson);
+    cJSON *pc = cJSON_GetObjectItem(root, "Children");
+    cJSON *pc_ = cJSON_GetArrayItem(pc, 0);
+    cJSON *pc_name = cJSON_GetObjectItem(pc_, "Text");
+    ESP_LOGI(TAG, "pc name = %s", pc_name->valuestring);
+    // cJSON *pc_sensors = cJSON_GetObjectItem(pc, "Children");
+    // int sensor_count = cJSON_GetArraySize(pc_sensors);
+    // for (int i = 0 ; i < sensor_count; i++)
+    // {
+    //     cJSON *cpu = cJSON_GetArrayItem(pc_sensors, i);
+    //     cJSON *cpu_image = cJSON_GetObjectItem(cpu, "Image_URL");
+    //     if ((cpu_image != NULL) && (strcmp(cpu_image->valuestring, "images_icon/cpu.png") == 0))
+    //     {
+    //         ESP_LOGI(TAG, "if cpu_image = %d", i);
+    //         cJSON *cpu_name = cJSON_GetObjectItem(cpu, "Text");
+    //         cJSON *cpu_aattributes = cJSON_GetObjectItem(cpu, "Children");
+    //         int cpu_aattributes_count = cJSON_GetArraySize(cpu_aattributes);
+    //         for (int x = 0; x < cpu_aattributes_count; x++)
+    //         {
+    //             cJSON *cpu_temperatures = cJSON_GetArrayItem(cpu_aattributes, x);
+    //             cJSON *cpu_temperatures_text = cJSON_GetObjectItem(cpu_temperatures, "Text");
+    //             if ((cpu_temperatures_text != NULL) && (strcmp(cpu_temperatures_text->valuestring, "Temperatures") == 0))
+    //             {
+    //                 ESP_LOGI(TAG, "if temper = %d", x);
+    //                 cJSON *cpu_items = cJSON_GetObjectItem(cpu_temperatures, "Children");
+    //                 int cpu_items_count = cJSON_GetArraySize(cpu_items);
+    //                 cJSON *cpu_package = cJSON_GetArrayItem(cpu_items, cpu_items_count - 1);
+    //                 cJSON *cpu_package_temperature = cJSON_GetObjectItem(cpu_package, "Value");
+    //                 ESP_LOGI(TAG, "cpu temperature:%s", cpu_package_temperature->valuestring);
+    //             }
+    //         }
+    //     }
+    // }
 
-    cJSON_Delete(json_root);
+    cJSON_Delete(root);
+
+    /*-------------------------------------end---------------------------------------------------*/
 
     taskEXIT_CRITICAL(0);
 }
