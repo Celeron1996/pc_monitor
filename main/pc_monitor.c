@@ -1040,6 +1040,8 @@ static void gui_task_main(void *pvParameters)
     int cpu_temper = 0;
     int gpu_temper = 0;
     int ram_load = 0;
+    int cpu_load = 0;
+    int gpu_load = 0;
 
     /* 设置表盘样式 */
     static lv_style_t style_cpu_lmeter;
@@ -1104,8 +1106,8 @@ static void gui_task_main(void *pvParameters)
     lv_obj_set_style_local_bg_grad_stop(chart, LV_CHART_PART_SERIES, LV_STATE_DEFAULT, 0);      /*Transparent on the bottom*/
 
     /*Add two data series*/
-    lv_chart_series_t * chart_ser_cpu_temper = lv_chart_add_series(chart, LV_COLOR_RED);
-    lv_chart_series_t * chart_ser_gpu_temper = lv_chart_add_series(chart, LV_COLOR_GREEN);
+    lv_chart_series_t * chart_ser_cpu_load = lv_chart_add_series(chart, LV_COLOR_RED);
+    lv_chart_series_t * chart_ser_gpu_load = lv_chart_add_series(chart, LV_COLOR_GREEN);
     lv_chart_series_t * chart_ser_ram_load = lv_chart_add_series(chart, LV_COLOR_BLUE);
 
     lv_obj_t *label_chart = lv_label_create(chart, NULL);
@@ -1119,17 +1121,18 @@ static void gui_task_main(void *pvParameters)
         cpu_temper = pc_get_cpu_temperature();
         gpu_temper = pc_get_gpu_temperature();
         ram_load = pc_get_ram_load();
+        cpu_load = pc_get_cpu_load();
+        gpu_load = pc_get_gpu_load();
 
         /* set data to gui */
         lv_linemeter_set_value(lmeter_cpu, cpu_temper);
         lv_linemeter_set_value(lmeter_gpu, gpu_temper);
-
         lv_label_set_text_fmt(label_cpu_temper, "%d°C", cpu_temper);
         lv_label_set_text_fmt(label_gpu_temper, "%d°C", gpu_temper);
 
-        lv_label_set_text_fmt(label_chart, "#ff0000 CPU:%d°C# #00ff00 GPU:%d°C# #0000ff RAM:%d%%",cpu_temper, gpu_temper, ram_load);
-        lv_chart_set_next(chart, chart_ser_cpu_temper, cpu_temper);
-        lv_chart_set_next(chart, chart_ser_gpu_temper, gpu_temper);
+        lv_label_set_text_fmt(label_chart, "#ff0000 CPU:%d%%# #00ff00 GPU:%d%%# #0000ff RAM:%d%%",cpu_load, gpu_load, ram_load);
+        lv_chart_set_next(chart, chart_ser_cpu_load, cpu_load);
+        lv_chart_set_next(chart, chart_ser_gpu_load, gpu_load);
         lv_chart_set_next(chart, chart_ser_ram_load, ram_load);
 
         vTaskDelay(pdMS_TO_TICKS(1000));
