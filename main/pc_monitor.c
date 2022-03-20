@@ -81,7 +81,7 @@ SemaphoreHandle_t xGuiSemaphore;
 /*---------------------------- LVGL about (end) -----------------------------*/
 
 /*--------------------------- http client (begin) -----------------------------*/
-#define MAX_HTTP_RECV_BUFFER_ (10*1024) /*用于存储PC httpServer接收到的json字符串的缓存的大小*/
+#define MAX_HTTP_RECV_BUFFER_ (16*1024) /*用于存储PC httpServer接收到的json字符串的缓存的大小*/
 static void http_task(void *pvParameters);  /*http任务，从PC http Server中读取信息json*/
 
 /**
@@ -321,7 +321,6 @@ static void lv_tick_task(void *arg) {
  * @brief 线程：获取pc的json
  * 
  */
-
 static void http_task(void *pvParameters)
 {
     BaseType_t error = pdFALSE;
@@ -330,13 +329,13 @@ static void http_task(void *pvParameters)
     error = xSemaphoreTake(xHttpSemaphore, portMAX_DELAY);  /*当连接上wifi之后，会得到信号量*/
     if (error != pdTRUE)
     {
-        while (1);
+        while (true);
     }
     vSemaphoreDelete(xHttpSemaphore);
 
     xTaskCreate(gui_task_main, "gui_task_main", 4*1024, (void*)NULL, 1, NULL);
 
-    buffer = malloc(MAX_HTTP_RECV_BUFFER_ + 1);
+    buffer = malloc(MAX_HTTP_RECV_BUFFER_);
     //cJSON *json_root = NULL;
 
     if (buffer == NULL) {
@@ -366,6 +365,7 @@ static void http_task(void *pvParameters)
             esp_http_client_close(client);
             vTaskDelay(pdMS_TO_TICKS(1000));
         }
+
         int content_length =  esp_http_client_fetch_headers(client);
         int total_read_len = 0, read_len;
         if (total_read_len < content_length && content_length <= MAX_HTTP_RECV_BUFFER_) {
