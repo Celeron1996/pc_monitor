@@ -340,7 +340,7 @@ static void http_task(void *pvParameters)
 
     if (buffer == NULL) {
         ESP_LOGE(TAG, "Cannot malloc http receive buffer");
-        return;
+        while (true);
     }
     esp_http_client_config_t config = {
         .url = URL,
