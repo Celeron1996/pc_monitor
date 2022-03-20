@@ -384,7 +384,7 @@ static void http_task(void *pvParameters)
 
         esp_http_client_close(client);
              
-        vTaskDelay(pdMS_TO_TICKS(2500));
+        vTaskDelay(pdMS_TO_TICKS(1500));
     }
 
     esp_http_client_cleanup(client);   
@@ -1039,6 +1039,7 @@ static void gui_task_main(void *pvParameters)
 {
     int cpu_temper = 0;
     int gpu_temper = 0;
+    int ram_load = 0;
 
     /* 设置表盘样式 */
     static lv_style_t style_cpu_lmeter;
@@ -1087,14 +1088,49 @@ static void gui_task_main(void *pvParameters)
 
     lv_obj_add_style(lmeter_gpu, LV_OBJ_PART_MAIN, &style_gpu_lmeter);
 
-    lv_ex_chart_2();
+    /* 创建图表 */
+    /*Create a chart*/
+    lv_obj_t * chart;
+    chart = lv_chart_create(lv_scr_act(), NULL);
+    lv_obj_set_size(chart, 240, 120);
+    lv_obj_align(chart, NULL, LV_ALIGN_IN_BOTTOM_LEFT, 0, 0);
+    lv_chart_set_type(chart, LV_CHART_TYPE_LINE);   /*Show lines and points too*/
+    lv_chart_set_div_line_count(chart, 0, 0);
+
+    /*Add a faded are effect*/
+    lv_obj_set_style_local_bg_opa(chart, LV_CHART_PART_SERIES, LV_STATE_DEFAULT, LV_OPA_50); /*Max. opa.*/
+    lv_obj_set_style_local_bg_grad_dir(chart, LV_CHART_PART_SERIES, LV_STATE_DEFAULT, LV_GRAD_DIR_VER);
+    lv_obj_set_style_local_bg_main_stop(chart, LV_CHART_PART_SERIES, LV_STATE_DEFAULT, 255);    /*Max opa on the top*/
+    lv_obj_set_style_local_bg_grad_stop(chart, LV_CHART_PART_SERIES, LV_STATE_DEFAULT, 0);      /*Transparent on the bottom*/
+
+    /*Add two data series*/
+    lv_chart_series_t * chart_ser_cpu_temper = lv_chart_add_series(chart, LV_COLOR_RED);
+    lv_chart_series_t * chart_ser_gpu_temper = lv_chart_add_series(chart, LV_COLOR_GREEN);
+    lv_chart_series_t * chart_ser_ram_load = lv_chart_add_series(chart, LV_COLOR_BLUE);
+
+    lv_obj_t *label_chart = lv_label_create(chart, NULL);
+    lv_label_set_recolor(label_chart, true);
+    lv_label_set_text_fmt(label_chart, "#ff0000 CPU:%d°C# #00ff00 GPU:%d°C# #0000ff RAM:%d%%",cpu_temper, gpu_temper, ram_load);
+    lv_obj_align(label_chart, NULL, LV_ALIGN_IN_TOP_LEFT, 0 ,0);
 
     while (true)
     {
-        /*refresh cpu temperature*/
+        /* get data */
         cpu_temper = pc_get_cpu_temperature();
+        gpu_temper = pc_get_gpu_temperature();
+        ram_load = pc_get_ram_load();
+
+        /* set data to gui */
         lv_linemeter_set_value(lmeter_cpu, cpu_temper);
+        lv_linemeter_set_value(lmeter_gpu, gpu_temper);
+
         lv_label_set_text_fmt(label_cpu_temper, "%d°C", cpu_temper);
+        lv_label_set_text_fmt(label_gpu_temper, "%d°C", gpu_temper);
+
+        lv_label_set_text_fmt(label_chart, "#ff0000 CPU:%d°C# #00ff00 GPU:%d°C# #0000ff RAM:%d%%",cpu_temper, gpu_temper, ram_load);
+        lv_chart_set_next(chart, chart_ser_cpu_temper, cpu_temper);
+        lv_chart_set_next(chart, chart_ser_gpu_temper, gpu_temper);
+        lv_chart_set_next(chart, chart_ser_ram_load, ram_load);
 
         vTaskDelay(pdMS_TO_TICKS(1000));
     }

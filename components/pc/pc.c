@@ -45,9 +45,11 @@ static int pc_str_to_int(char *pStr);
 static char _pc_name_str[64];
 static char _cpu_name_str[64];
 static char _gpu_name_str[64];
+static char _ram_load_str[16];
 
 static int _gpu_temperature = 0;
 static int _cpu_temperature = 0;
+static int _ram_load = 0;
 
 
 /**
@@ -68,46 +70,6 @@ void pc_analysis_json(void *pJson)
 {
     //taskENTER_CRITICAL(0);
 
-    // cJSON *json_root = cJSON_Parse(pJson);
-    // if (json_root == NULL)
-    // {
-    //     ESP_LOGE(TAG, "json_root NULL");
-    // }
-
-    // cJSON *json_children = cJSON_GetObjectItem(json_root, "Children");
-    // int children_size = cJSON_GetArraySize(json_children);
-    
-    // for (int i = 0; i < children_size; i++) {
-    //     cJSON *item;
-    //     item = cJSON_GetArrayItem(json_children, i);
-    //     if (cJSON_GetArraySize(item) <= 1) {
-    //         cJSON_Delete(item);
-    //     }
-    //     else {
-    //         cJSON *host_name = cJSON_GetObjectItem(item, "Text");
-    //         cJSON *sensors = cJSON_GetObjectItem(item, "Children");
-    //         cJSON *cpu = cJSON_GetArrayItem(sensors, 1);
-    //         cJSON *cpu_name = cJSON_GetObjectItem(cpu, "Text");
-    //         cJSON *cpu_sensor = cJSON_GetObjectItem(cpu, "Children");
-    //         cJSON *cpu_temperature = cJSON_GetArrayItem(cpu_sensor, 1);
-    //         cJSON *cpu_temper_children = cJSON_GetObjectItem(cpu_temperature, "Children");
-    //         cJSON *cpu_temper_package = cJSON_GetArrayItem(cpu_temper_children, 4);//
-    //         cJSON *cpu_temper_package_value = cJSON_GetObjectItem(cpu_temper_package, "Value");
-
-    //         memcpy(_pc_name_str, host_name->valuestring,
-    //                 strlen(host_name->valuestring)>sizeof(_pc_name_str)?sizeof(_pc_name_str):strlen(host_name->valuestring));/*获取主机名字*/
-
-    //         memcpy(_cpu_name_str, cpu_name->valuestring,
-    //                 strlen(cpu_name->valuestring)>sizeof(_cpu_name_str)?sizeof(_pc_name_str):strlen(cpu_name->valuestring));/*获取cpu名字*/
-
-    //         _cpu_temperature = pc_str_to_int(cpu_temper_package_value->valuestring);
-
-    //         ESP_LOGI(TAG, "children_size = %d, i = %d, name = %s", children_size, i, _pc_name_str);
-    //     }
-    // }
-
-    // cJSON_Delete(json_root);
-
     /*-------------------------------------begin---------------------------------------------------*/
     cJSON *root = cJSON_Parse(pJson);
     cJSON *children = cJSON_GetObjectItem(root, "Children");
@@ -117,16 +79,17 @@ void pc_analysis_json(void *pJson)
     int sensor_count = cJSON_GetArraySize(pc_sensors);
     for (int i = 0 ; i < sensor_count; i++)
     {
+        /*================================ 遍历查找cpu 属性 begin ======================================*/
         cJSON *cpu = cJSON_GetArrayItem(pc_sensors, i);
         cJSON *cpu_image = cJSON_GetObjectItem(cpu, "ImageURL");
         if ((cpu_image != NULL) && (strcmp(cpu_image->valuestring, "images_icon/cpu.png") == 0))
         {
             cJSON *cpu_name = cJSON_GetObjectItem(cpu, "Text");
-            cJSON *cpu_aattributes = cJSON_GetObjectItem(cpu, "Children");
-            int cpu_aattributes_count = cJSON_GetArraySize(cpu_aattributes);
-            for (int x = 0; x < cpu_aattributes_count; x++)
+            cJSON *cpu_attributes = cJSON_GetObjectItem(cpu, "Children");
+            int cpu_attributes_count = cJSON_GetArraySize(cpu_attributes);
+            for (int x = 0; x < cpu_attributes_count; x++)
             {
-                cJSON *cpu_temperatures = cJSON_GetArrayItem(cpu_aattributes, x);
+                cJSON *cpu_temperatures = cJSON_GetArrayItem(cpu_attributes, x);
                 cJSON *cpu_temperatures_text = cJSON_GetObjectItem(cpu_temperatures, "Text");
                 if ((cpu_temperatures_text != NULL) && (strcmp(cpu_temperatures_text->valuestring, "Temperatures") == 0))
                 {
@@ -140,14 +103,44 @@ void pc_analysis_json(void *pJson)
                     memcpy(_cpu_name_str, cpu_name->valuestring,
                             strlen(cpu_name->valuestring)>sizeof(_cpu_name_str)?sizeof(_pc_name_str):strlen(cpu_name->valuestring));/*获取cpu名字*/
                     _cpu_temperature = pc_str_to_int(cpu_package_temperature->valuestring);/*获取cpu package温度*/
+                }
+            }
+        }
+        /*================================ 遍历查找cpu 属性 end ======================================*/
 
-                    ESP_LOGI(TAG, "pc name:[%s] cpu name:[%s] cpu temper:[%d°C]",_pc_name_str, _cpu_name_str, _cpu_temperature);
+        /*================================ 遍历查找ram 属性 end ======================================*/
+        cJSON *ram = cJSON_GetArrayItem(pc_sensors, i);
+        cJSON *ram_image = cJSON_GetObjectItem(ram, "ImageURL");
+        if ((ram_image != NULL) && (strcmp(ram_image->valuestring, "images_icon/ram.png") == 0))
+        {
+            cJSON *ram_attributes = cJSON_GetObjectItem(ram, "Children");
+            int ram_attributes_count = cJSON_GetArraySize(ram_attributes);
+            for (int x = 0; x < ram_attributes_count; x++)
+            {
+                cJSON *ram_load = cJSON_GetArrayItem(ram_attributes, x);
+                cJSON *ram_load_text = cJSON_GetObjectItem(ram_load, "Text");
+                if ((ram_load_text != NULL) && (strcmp(ram_load_text->valuestring, "Load") == 0))
+                {
+                    cJSON *ram_load_value = cJSON_GetObjectItem(ram_load, "Children");
+                    if(ram_load_value != NULL)
+                    {
+                        ram_load_value = cJSON_GetArrayItem(ram_load_value, 0);
+                        ram_load_value = cJSON_GetObjectItem(ram_load_value, "Value");
+                        if(ram_load_value != NULL)
+                        {
+                            memcpy(_ram_load_str, ram_load_value->valuestring,
+                                    strlen(ram_load_value->valuestring)>sizeof(_ram_load_str)?sizeof(_ram_load_str):strlen(ram_load_value->valuestring));
+                            _ram_load = pc_str_to_int(ram_load_value->valuestring);
+                        }
+                    }
                 }
             }
         }
     }
 
     cJSON_Delete(root);
+
+    ESP_LOGI(TAG, "pc name:[%s] cpu name:[%s] cpu temper:[%d°C] ram load:[%s,int=%d]",_pc_name_str, _cpu_name_str, _cpu_temperature, _ram_load_str, _ram_load);
 
     /*-------------------------------------end---------------------------------------------------*/
 
@@ -164,6 +157,24 @@ int pc_get_cpu_temperature(void)
     return _cpu_temperature;
 }
 
+/**
+ * @brief 获取gpu温度
+ * @return 返回gpu温度
+ */
+int pc_get_gpu_temperature(void)
+{
+    return _gpu_temperature;
+}
+
+/**
+ * @brief 获取内存使用率
+ * @return 返回内存使用率
+ */
+int pc_get_ram_load(void)
+{
+    return _ram_load;
+}
+
 
 
 /**
@@ -178,9 +189,13 @@ static int pc_str_to_int(char *pStr)
 
     while (pStr[index] != '\0')
     {
-        if (pStr[index] > '0' && pStr[index] <= '9')
+        if (pStr[index] >= '0' && pStr[index] <= '9')
         {
             result = result * 10 + (pStr[index] - '0');
+        }
+        else if (pStr[index] == '.')    /*小数点后面的不要了，取整*/
+        {
+            break;
         }
         index++;
     }
