@@ -164,11 +164,6 @@ void app_main(void)
 
     xTaskCreate(http_task, "http_task", 4*1024, (void*)NULL, 3, NULL);
 
-	xTaskCreate(gui_task_main, "gui_task_main", 4*1024, (void*)NULL, 1, NULL);
-
-	while (1) {
-		 vTaskDelay(500 / portTICK_RATE_MS);
-	}
 }
 
 
@@ -338,6 +333,8 @@ static void http_task(void *pvParameters)
         while (1);
     }
     vSemaphoreDelete(xHttpSemaphore);
+
+    xTaskCreate(gui_task_main, "gui_task_main", 4*1024, (void*)NULL, 1, NULL);
 
     buffer = malloc(MAX_HTTP_RECV_BUFFER_ + 1);
     //cJSON *json_root = NULL;
