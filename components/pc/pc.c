@@ -45,15 +45,22 @@ static int pc_str_to_int(char *pStr);
 static char _pc_name_str[64];
 static char _cpu_name_str[64];
 static char _gpu_name_str[64];
-static char _ram_load_str[16];
-static char _cpu_load_str[16];
-static char _gpu_load_str[16];
+
+static char _ram_load_str[16] = "0%";
+static char _cpu_load_str[16] = "0%";
+static char _gpu_load_str[16] = "0%";
+static char _gpu_temperature_str[16] = "0°C";
+static char _cpu_temperature_str[16] = "0°C";
+
 
 static int _gpu_temperature = 0;
 static int _cpu_temperature = 0;
 static int _ram_load = 0;
 static int _cpu_load = 0;
 static int _gpu_load = 0;
+
+static bool _cpu_temperature_unit_celsius = true;
+static bool _gpu_temperature_unit_celsius = true;
 
 
 /**
@@ -81,6 +88,19 @@ void pc_analysis_json(void *pJson)
     cJSON *pc_name = cJSON_GetObjectItem(pc, "Text");
     cJSON *pc_sensors = cJSON_GetObjectItem(pc, "Children");
     int sensor_count = cJSON_GetArraySize(pc_sensors);
+
+    memset(_pc_name_str, 0, sizeof(_pc_name_str));
+    memset(_cpu_name_str, 0, sizeof(_cpu_name_str));
+    memset(_gpu_name_str, 0, sizeof(_gpu_name_str));
+    memset(_cpu_temperature_str, 0, sizeof(_cpu_temperature_str));
+    memset(_gpu_temperature_str, 0, sizeof(_gpu_temperature_str));
+    memset(_cpu_load_str, 0, sizeof(_cpu_load_str));
+    memset(_gpu_load_str, 0, sizeof(_gpu_load_str));
+    memset(_ram_load_str, 0, sizeof(_ram_load_str));
+
+    memcpy(_pc_name_str, pc_name->valuestring,
+            strlen(pc_name->valuestring)>sizeof(_pc_name_str)?sizeof(_pc_name_str):strlen(pc_name->valuestring));/*获取主机名字*/
+
     for (int i = 0 ; i < sensor_count; i++)
     {
         /*================================ 遍历查找cpu 属性 begin ======================================*/
@@ -90,6 +110,9 @@ void pc_analysis_json(void *pJson)
         {
             cJSON *cpu_name = cJSON_GetObjectItem(cpu, "Text");
             cJSON *cpu_children = cJSON_GetObjectItem(cpu, "Children");
+            memcpy(_cpu_name_str, cpu_name->valuestring,
+                    strlen(cpu_name->valuestring)>sizeof(_cpu_name_str)?sizeof(_pc_name_str):strlen(cpu_name->valuestring));/*获取cpu名字*/
+
             int cpu_children_count = cJSON_GetArraySize(cpu_children);
             for (int x = 0; x < cpu_children_count; x++)
             {
@@ -103,11 +126,18 @@ void pc_analysis_json(void *pJson)
                     cJSON *cpu_package = cJSON_GetArrayItem(cpu_temper_children, cpu_temper_children_count - 1);
                     cJSON *cpu_package_temperature_value = cJSON_GetObjectItem(cpu_package, "Value");
 
-                    memcpy(_pc_name_str, pc_name->valuestring,
-                            strlen(pc_name->valuestring)>sizeof(_pc_name_str)?sizeof(_pc_name_str):strlen(pc_name->valuestring));/*获取主机名字*/
-                    memcpy(_cpu_name_str, cpu_name->valuestring,
-                            strlen(cpu_name->valuestring)>sizeof(_cpu_name_str)?sizeof(_pc_name_str):strlen(cpu_name->valuestring));/*获取cpu名字*/
+                    memcpy(_cpu_temperature_str, cpu_package_temperature_value->valuestring,
+                            strlen(cpu_package_temperature_value->valuestring)>sizeof(_cpu_temperature_str)?sizeof(_cpu_temperature_str):strlen(cpu_package_temperature_value->valuestring));
                     _cpu_temperature = pc_str_to_int(cpu_package_temperature_value->valuestring);/*获取cpu package温度*/
+
+                    if (_cpu_temperature_str[strlen(_cpu_temperature_str) - 1] == 'C')  /*温度单位是摄氏度还是华氏度*/
+                    {
+                        _cpu_temperature_unit_celsius = true;
+                    }
+                    else
+                    {
+                        _cpu_temperature_unit_celsius = false;
+                    }
                 }
 
                 /* cpu 使用率 */
@@ -165,8 +195,8 @@ void pc_analysis_json(void *pJson)
 
     cJSON_Delete(root);
 
-    ESP_LOGI(TAG, "pc name:[%s] cpu name:[%s] cpu temper:[%d°C] ram load:[%s,int=%d] cpu load:[%s,int=%d]",
-            _pc_name_str, _cpu_name_str, _cpu_temperature, _ram_load_str, _ram_load, _cpu_load_str, _cpu_load);
+    ESP_LOGI(TAG, "pc name:[%s] cpu name:[%s] cpu temper:[%d°C] ram load:[%s,int=%d] cpu load:[%s,int=%d] cpu_temper_unit:[%s]",
+            _pc_name_str, _cpu_name_str, _cpu_temperature, _ram_load_str, _ram_load, _cpu_load_str, _cpu_load, (_cpu_temperature_unit_celsius)?("celsius"):("fahrenheit"));
 
     /*-------------------------------------end---------------------------------------------------*/
 
@@ -244,4 +274,75 @@ int pc_get_cpu_load(void)
 int pc_get_gpu_load(void)
 {
     return _gpu_load;
+}
+
+
+/**
+ * @brief 获取cpu温度字符串
+ * @return 返回字符串指针
+ * 
+ */
+char *pc_get_cpu_temperature_str(void)
+{
+    return _cpu_temperature_str;
+}
+
+/**
+ * @brief 获取gpu温度字符串
+ * @return 返回字符串指针
+ * 
+ */
+char *pc_get_gpu_temperature_str(void)
+{
+    return _gpu_temperature_str;
+}
+
+/**
+ * @brief cpu温度单位是摄氏度
+ * @return 返回布尔类型
+ * 
+ */
+bool pc_is_cpu_temperature_unit_celsius(void)
+{
+    return _cpu_temperature_unit_celsius;
+}
+
+/**
+ * @brief gpu温度单位是摄氏度
+ * @return 返回布尔类型
+ * 
+ */
+bool pc_is_gpu_temperature_unit_celsius(void)
+{
+    return _gpu_temperature_unit_celsius;
+}
+
+/**
+ * @brief 获取gpu使用率字符串
+ * @return 返回字符串指针
+ * 
+ */
+char *pc_get_gpu_load_str(void)
+{
+    return _gpu_load_str;
+}
+
+/**
+ * @brief 获取cpu使用率字符串
+ * @return 返回字符串指针
+ * 
+ */
+char *pc_get_cpu_load_str(void)
+{
+    return _cpu_load_str;
+}
+
+/**
+ * @brief 获取ram使用率字符串
+ * @return 返回字符串指针
+ * 
+ */
+char *pc_get_ram_load_str(void)
+{
+    return _ram_load_str;
 }

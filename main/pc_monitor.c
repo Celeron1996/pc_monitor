@@ -1067,7 +1067,7 @@ static void gui_task_main(void *pvParameters)
     lv_obj_align(label_cpu_title, NULL, LV_ALIGN_IN_BOTTOM_MID, 0, -16);
     
     lv_obj_t *label_cpu_temper = lv_label_create(lmeter_cpu, NULL);
-    lv_label_set_text_fmt(label_cpu_temper, "%d°C", cpu_temper);
+    lv_label_set_text_fmt(label_cpu_temper, "%s", pc_get_cpu_temperature_str());
     lv_obj_align(label_cpu_temper, NULL, LV_ALIGN_CENTER, 0, 0);
 
     lv_obj_add_style(lmeter_cpu, LV_OBJ_PART_MAIN, &style_cpu_lmeter);
@@ -1085,7 +1085,7 @@ static void gui_task_main(void *pvParameters)
     lv_obj_align(label_gpu_title, NULL, LV_ALIGN_IN_BOTTOM_MID, 0, -16);
 
     lv_obj_t *label_gpu_temper = lv_label_create(lmeter_gpu, NULL);
-    lv_label_set_text_fmt(label_gpu_temper, "%d°C", gpu_temper);
+    lv_label_set_text_fmt(label_gpu_temper, "%s", pc_get_gpu_temperature_str());
     lv_obj_align(label_gpu_temper, NULL, LV_ALIGN_CENTER, 0, 0);
 
     lv_obj_add_style(lmeter_gpu, LV_OBJ_PART_MAIN, &style_gpu_lmeter);
@@ -1112,7 +1112,8 @@ static void gui_task_main(void *pvParameters)
 
     lv_obj_t *label_chart = lv_label_create(chart, NULL);
     lv_label_set_recolor(label_chart, true);
-    lv_label_set_text_fmt(label_chart, "#ff0000 CPU:%d°C# #00ff00 GPU:%d°C# #0000ff RAM:%d%%",cpu_temper, gpu_temper, ram_load);
+    lv_label_set_text_fmt(label_chart, "#ff0000 CPU:%s# #00ff00 GPU:%s#\n#0000ff RAM:%s",
+                            pc_get_cpu_load_str(), pc_get_gpu_load_str(), pc_get_ram_load_str());
     lv_obj_align(label_chart, NULL, LV_ALIGN_IN_TOP_LEFT, 0 ,0);
 
     while (true)
@@ -1120,6 +1121,15 @@ static void gui_task_main(void *pvParameters)
         /* get data */
         cpu_temper = pc_get_cpu_temperature();
         gpu_temper = pc_get_gpu_temperature();
+        if (!(pc_is_cpu_temperature_unit_celsius()))
+        {
+            cpu_temper = ((cpu_temper - 32)*5)/9;   /*表盘是满了是100，按照摄氏度来的，华氏度的话转成摄氏度: 华氏度 = 32℉ + (摄氏度 * 1.8) */
+        }
+        if (!(pc_is_gpu_temperature_unit_celsius()))
+        {
+            gpu_temper = ((gpu_temper - 32)*5)/9;   /*表盘是满了是100，按照摄氏度来的，华氏度的话转成摄氏度: 华氏度 = 32℉ + (摄氏度 * 1.8) */
+        }
+
         ram_load = pc_get_ram_load();
         cpu_load = pc_get_cpu_load();
         gpu_load = pc_get_gpu_load();
@@ -1127,10 +1137,14 @@ static void gui_task_main(void *pvParameters)
         /* set data to gui */
         lv_linemeter_set_value(lmeter_cpu, cpu_temper);
         lv_linemeter_set_value(lmeter_gpu, gpu_temper);
-        lv_label_set_text_fmt(label_cpu_temper, "%d°C", cpu_temper);
-        lv_label_set_text_fmt(label_gpu_temper, "%d°C", gpu_temper);
+        lv_label_set_text_fmt(label_cpu_temper, "%s", pc_get_cpu_temperature_str());
+        lv_label_set_text_fmt(label_gpu_temper, "%s", pc_get_gpu_temperature_str());
+        lv_obj_align(label_cpu_temper, NULL, LV_ALIGN_CENTER, 0, 0);
+        lv_obj_align(label_gpu_temper, NULL, LV_ALIGN_CENTER, 0, 0);
 
-        lv_label_set_text_fmt(label_chart, "#ff0000 CPU:%d%%# #00ff00 GPU:%d%%# #0000ff RAM:%d%%",cpu_load, gpu_load, ram_load);
+        lv_label_set_text_fmt(label_chart, "#ff0000 CPU:%s# #00ff00 GPU:%s#\n#0000ff RAM:%s",
+                                pc_get_cpu_load_str(), pc_get_gpu_load_str(), pc_get_ram_load_str());
+
         lv_chart_set_next(chart, chart_ser_cpu_load, cpu_load);
         lv_chart_set_next(chart, chart_ser_gpu_load, gpu_load);
         lv_chart_set_next(chart, chart_ser_ram_load, ram_load);
