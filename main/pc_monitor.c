@@ -214,6 +214,11 @@ static void guiTask(void *pvParameter) {
     lv_disp_drv_init(&disp_drv);
     disp_drv.flush_cb = disp_driver_flush;
 
+    /*celeron: my init code*/
+    disp_drv.sw_rotate = 1;
+    disp_drv.rotated = LV_DISP_ROT_90;
+    /*---------------------*/
+
     /* When using a monochrome display we need to register the callbacks:
      * - rounder_cb
      * - set_px_cb */
@@ -977,8 +982,7 @@ void my_demo(void)
 static void my_style(void)
 {
     
-
-    // lv_obj_t *obj = lv_scr_act();
+    lv_obj_t *obj = lv_scr_act();
 
     // lv_style_init(&style_main);
 
