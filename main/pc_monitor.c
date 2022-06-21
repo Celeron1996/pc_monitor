@@ -81,7 +81,7 @@ SemaphoreHandle_t xGuiSemaphore;
 /*---------------------------- LVGL about (end) -----------------------------*/
 
 /*--------------------------- http client (begin) -----------------------------*/
-#define MAX_HTTP_RECV_BUFFER_ (16*1024) /*用于存储PC httpServer接收到的json字符串的缓存的大小*/
+#define MAX_HTTP_RECV_BUFFER_ (10*1024) /*用于存储PC httpServer接收到的json字符串的缓存的大小*/
 static void http_task(void *pvParameters);  /*http任务，从PC http Server中读取信息json*/
 
 /**
@@ -363,6 +363,9 @@ static void http_task(void *pvParameters)
 
     while (true) {
         esp_err_t err;
+        
+        memset(buffer, 0, MAX_HTTP_RECV_BUFFER_);
+        
         while ((err = esp_http_client_open(client, 0)) != ESP_OK) {
             ESP_LOGE(TAG, "Failed to open HTTP connection: %s", esp_err_to_name(err));
             //free(buffer);
