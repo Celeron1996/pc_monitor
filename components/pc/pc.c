@@ -113,7 +113,7 @@ void pc_analysis_json(void *pJson)
             cJSON *cpu_name = cJSON_GetObjectItem(cpu, "Text");
             cJSON *cpu_children = cJSON_GetObjectItem(cpu, "Children");
             memcpy(_cpu_name_str, cpu_name->valuestring,
-                    strlen(cpu_name->valuestring)>sizeof(_cpu_name_str)?sizeof(_pc_name_str):strlen(cpu_name->valuestring));/*获取cpu名字*/
+                    strlen(cpu_name->valuestring)>sizeof(_cpu_name_str)?sizeof(_cpu_name_str):strlen(cpu_name->valuestring));/*获取cpu名字*/
 
             int cpu_children_count = cJSON_GetArraySize(cpu_children);
             for (int x = 0; x < cpu_children_count; x++)
@@ -200,7 +200,12 @@ void pc_analysis_json(void *pJson)
         cJSON *gpu_image = cJSON_GetObjectItem(gpu, "ImageURL");
         if ((gpu_image != NULL) && ((strcmp(gpu_image->valuestring, "images_icon/nvidia.png") == 0) || (strcmp(gpu_image->valuestring, "images_icon/amd.png") == 0)))
         {
+
+            cJSON *gpu_name = cJSON_GetObjectItem(gpu, "Text");
             cJSON *gpu_children = cJSON_GetObjectItem(gpu, "Children");
+            memcpy(_gpu_name_str, gpu_name->valuestring,
+                    strlen(gpu_name->valuestring)>sizeof(_gpu_name_str)?sizeof(_gpu_name_str):strlen(gpu_name->valuestring));/*获取gpu名字*/
+
             int gpu_children_count = cJSON_GetArraySize(gpu_children);
             for (int x = 0; x < gpu_children_count; x++)
             {
