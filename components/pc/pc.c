@@ -38,6 +38,8 @@
 
 #include "cJSON.h"
 
+#define VAR_TO_STR(STRING__)	#STRING__
+
 static char *TAG = "PC";
 
 static int pc_str_to_int(char *pStr);
@@ -163,7 +165,7 @@ void pc_analysis_json(void *pJson)
         }
         /*================================ 遍历查找cpu 属性 end ======================================*/
 
-        /*================================ 遍历查找ram 属性 end ======================================*/
+        /*================================ 遍历查找ram 属性 begin ======================================*/
         cJSON *ram = cJSON_GetArrayItem(pc_sensors, i);
         cJSON *ram_image = cJSON_GetObjectItem(ram, "ImageURL");
         if ((ram_image != NULL) && (strcmp(ram_image->valuestring, "images_icon/ram.png") == 0))
@@ -191,13 +193,111 @@ void pc_analysis_json(void *pJson)
                 }
             }
         }
+        /*================================ 遍历查找ram 属性 end ======================================*/
+
+        /*================================ 遍历查找gpu 属性 begin ======================================*/
+        cJSON *gpu = cJSON_GetArrayItem(pc_sensors, i);
+        cJSON *gpu_image = cJSON_GetObjectItem(gpu, "ImageURL");
+        if ((gpu_image != NULL) && ((strcmp(gpu_image->valuestring, "images_icon/nvidia.png") == 0) || (strcmp(gpu_image->valuestring, "images_icon/amd.png") == 0)))
+        {
+            cJSON *gpu_children = cJSON_GetObjectItem(gpu, "Children");
+            int gpu_children_count = cJSON_GetArraySize(gpu_children);
+            for (int x = 0; x < gpu_children_count; x++)
+            {
+            	/* 获取 gpu 使用率，有多个gpu使用率，只提取core */
+                cJSON *gpu_load = cJSON_GetArrayItem(gpu_children, x);
+                cJSON *gpu_load_text = cJSON_GetObjectItem(gpu_load, "Text");
+                if ((gpu_load_text != NULL) && (strcmp(gpu_load_text->valuestring, "Load") == 0))
+                {
+                    cJSON *gpu_load_children = cJSON_GetObjectItem(gpu_load, "Children");
+                    int gpu_load_children_count = cJSON_GetArraySize(gpu_load_children);
+					for (int x = 0; x < gpu_load_children_count; x++)
+					{
+						cJSON *gpu_load_core = cJSON_GetArrayItem(gpu_load_children, x);
+						cJSON *gpu_load_core_text = cJSON_GetObjectItem(gpu_load_core, "Text");
+						if ((gpu_load_core_text != NULL) && (strcmp(gpu_load_core_text->valuestring, "GPU Core") == 0))
+						{
+		                    cJSON *gpu_load_core_value = cJSON_GetObjectItem(gpu_load_core, "Value");
+		                    if(gpu_load_core_value != NULL)
+		                    {    
+	                            memcpy(_gpu_load_str, gpu_load_core_value->valuestring,
+	                                    strlen(gpu_load_core_value->valuestring)>sizeof(_gpu_load_str)?sizeof(_gpu_load_str):strlen(gpu_load_core_value->valuestring));
+	                            _gpu_load = pc_str_to_int(gpu_load_core_value->valuestring);
+		                    }							
+						}
+					}
+                }
+
+                /* 获取 gpu 温度 */
+                cJSON *gpu_temperatures = cJSON_GetArrayItem(gpu_children, x);
+                cJSON *gpu_temperatures_text = cJSON_GetObjectItem(gpu_temperatures, "Text");
+                if ((gpu_temperatures_text != NULL) && (strcmp(gpu_temperatures_text->valuestring, "Temperatures") == 0))
+                {
+                    cJSON *gpu_temperatures_children = cJSON_GetObjectItem(gpu_temperatures, "Children");
+                    int gpu_temperatures_children_count = cJSON_GetArraySize(gpu_temperatures_children);
+					for (int x = 0; x < gpu_temperatures_children_count; x++)
+					{
+						cJSON *gpu_temperatures_core = cJSON_GetArrayItem(gpu_temperatures_children, x);
+						cJSON *gpu_temperatures_core_text = cJSON_GetObjectItem(gpu_temperatures_core, "Text");
+						if ((gpu_temperatures_core_text != NULL) && (strcmp(gpu_temperatures_core_text->valuestring, "GPU Core") == 0))
+						{
+		                    cJSON *gpu_temperatures_core_value = cJSON_GetObjectItem(gpu_temperatures_core, "Value");
+		                    if(gpu_temperatures_core_value != NULL)
+		                    {    
+	                            memcpy(_gpu_temperature_str, gpu_temperatures_core_value->valuestring,
+	                                    strlen(gpu_temperatures_core_value->valuestring)>sizeof(_gpu_temperature_str)?sizeof(_gpu_temperature_str):strlen(gpu_temperatures_core_value->valuestring));
+	                            _gpu_temperature = pc_str_to_int(gpu_temperatures_core_value->valuestring);
+
+			                    if (_gpu_temperature_str[strlen(_gpu_temperature_str) - 1] == 'C')  /*温度单位是摄氏度还是华氏度*/
+			                    {
+			                        _gpu_temperature_unit_celsius = true;
+			                    }
+			                    else
+			                    {
+			                        _gpu_temperature_unit_celsius = false;
+			                    }                           
+		                    }							
+						}
+					}
+                }                
+                
+            }
+        }        
+        /*================================ 遍历查找gpu 属性 end ======================================*/
     }
 
     cJSON_Delete(root);
 
-    ESP_LOGI(TAG, "pc name:[%s] cpu name:[%s] cpu temper:[%d°C] ram load:[%s,int=%d] cpu load:[%s,int=%d] cpu_temper_unit:[%s]",
-            _pc_name_str, _cpu_name_str, _cpu_temperature, _ram_load_str, _ram_load, _cpu_load_str, _cpu_load, (_cpu_temperature_unit_celsius)?("celsius"):("fahrenheit"));
-
+	ESP_LOGI(TAG, 	"\n---------------------------------------------------------\n"\
+					"%s:[%s]\n"\
+					"%s:[%s]\n"\
+					"%s:[%s]\n"\
+					"%s:[%s]\n"\
+					"%s:[%s]\n"\
+					"%s:[%s]\n"\
+					"%s:[%s]\n"\
+					"%s:[%s]\n"\
+					"%s:[%d]\n"\
+					"%s:[%d]\n"\
+					"%s:[%d]\n"\
+					"%s:[%d]\n"\
+					"%s:[%d]\n"\
+					"%s:[%d]\n"\
+					"---------------------------------------------------------\n",\
+					VAR_TO_STR(_pc_name_str),_pc_name_str, \
+					VAR_TO_STR(_cpu_name_str),_cpu_name_str, \
+					VAR_TO_STR(_gpu_name_str),_gpu_name_str, \
+					VAR_TO_STR(_ram_load_str),_ram_load_str, \
+					VAR_TO_STR(_cpu_load_str),_cpu_load_str, \
+					VAR_TO_STR(_gpu_load_str),_gpu_load_str, \
+					VAR_TO_STR(_gpu_temperature_str),_gpu_temperature_str, \
+					VAR_TO_STR(_cpu_temperature_str),_cpu_temperature_str, \
+					VAR_TO_STR(_gpu_temperature),_gpu_temperature, \
+					VAR_TO_STR(_cpu_temperature),_cpu_temperature, \
+					VAR_TO_STR(_ram_load),_ram_load, \
+					VAR_TO_STR(_cpu_load),_cpu_load, \
+					VAR_TO_STR(_cpu_temperature_unit_celsius),_cpu_temperature_unit_celsius, \
+					VAR_TO_STR(_gpu_temperature_unit_celsius),_gpu_temperature_unit_celsius);
     /*-------------------------------------end---------------------------------------------------*/
 
     //taskEXIT_CRITICAL(0);

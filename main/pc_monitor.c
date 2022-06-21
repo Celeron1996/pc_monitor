@@ -81,7 +81,7 @@ SemaphoreHandle_t xGuiSemaphore;
 /*---------------------------- LVGL about (end) -----------------------------*/
 
 /*--------------------------- http client (begin) -----------------------------*/
-#define MAX_HTTP_RECV_BUFFER_ (10*1024) /*用于存储PC httpServer接收到的json字符串的缓存的大小*/
+#define MAX_HTTP_RECV_BUFFER_ (9*1024) /*用于存储PC httpServer接收到的json字符串的缓存的大小*/
 static void http_task(void *pvParameters);  /*http任务，从PC http Server中读取信息json*/
 
 /**
