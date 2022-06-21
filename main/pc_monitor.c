@@ -81,7 +81,7 @@ SemaphoreHandle_t xGuiSemaphore;
 /*---------------------------- LVGL about (end) -----------------------------*/
 
 /*--------------------------- http client (begin) -----------------------------*/
-#define MAX_HTTP_RECV_BUFFER_ (9*1024) /*用于存储PC httpServer接收到的json字符串的缓存的大小*/
+#define MAX_HTTP_RECV_BUFFER_ (10*1024) /*用于存储PC httpServer接收到的json字符串的缓存的大小*/
 static void http_task(void *pvParameters);  /*http任务，从PC http Server中读取信息json*/
 
 /**
@@ -339,14 +339,15 @@ static void http_task(void *pvParameters)
     vSemaphoreDelete(xHttpSemaphore);
 
     xTaskCreate(gui_task_main, "gui_task_main", 4*1024, (void*)NULL, 1, NULL);
-
+    
+	/*
     buffer = malloc(MAX_HTTP_RECV_BUFFER_);
-    //cJSON *json_root = NULL;
-
-    if (buffer == NULL) {
-        ESP_LOGE(TAG, "Cannot malloc http receive buffer");
-        while (true);
-    }
+	if (buffer == NULL) {
+		ESP_LOGE(TAG, "Cannot malloc http receive buffer");
+		while (true);
+	}
+	*/
+    
     esp_http_client_config_t config = {
         .url = URL,
     };
@@ -364,8 +365,6 @@ static void http_task(void *pvParameters)
     while (true) {
         esp_err_t err;
         
-        memset(buffer, 0, MAX_HTTP_RECV_BUFFER_);
-        
         while ((err = esp_http_client_open(client, 0)) != ESP_OK) {
             ESP_LOGE(TAG, "Failed to open HTTP connection: %s", esp_err_to_name(err));
             //free(buffer);
@@ -375,13 +374,21 @@ static void http_task(void *pvParameters)
         }
 
         int content_length =  esp_http_client_fetch_headers(client);
+        buffer = malloc(content_length + 64);
+		if (buffer == NULL) {
+			ESP_LOGE(TAG, "Cannot malloc http receive buffer");
+			esp_http_client_close(client);
+			vTaskDelay(pdMS_TO_TICKS(1500));
+			continue;
+		}
+		memset(buffer, 0, content_length);
+
         int total_read_len = 0, read_len;
         if (total_read_len < content_length && content_length <= MAX_HTTP_RECV_BUFFER_) {
             read_len = esp_http_client_read(client, buffer, content_length);
             if (read_len <= 0) {
                 ESP_LOGE(TAG, "Error read data");
             }
-            buffer[read_len] = 0;
             ESP_LOGD(TAG, "read_len = %d", read_len);
         }
         ESP_LOGI(TAG, "HTTP Stream reader Status = %d, content_length = %d",
@@ -389,6 +396,7 @@ static void http_task(void *pvParameters)
                         esp_http_client_get_content_length(client));
 
         pc_analysis_json(buffer);
+        free(buffer);
 
         esp_http_client_close(client);
              
@@ -397,7 +405,7 @@ static void http_task(void *pvParameters)
 
     esp_http_client_cleanup(client);   
 
-    free(buffer);
+    //free(buffer);
     ESP_LOGI(TAG, "Finish http example");
     vTaskDelete(NULL);
 }
