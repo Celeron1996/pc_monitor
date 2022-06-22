@@ -288,6 +288,7 @@ void pc_analysis_json(void *pJson)
 					"%s:[%d]\n"\
 					"%s:[%d]\n"\
 					"%s:[%d]\n"\
+					"%s:[%d]\n"\
 					"---------------------------------------------------------\n",\
 					VAR_TO_STR(_pc_name_str),_pc_name_str, \
 					VAR_TO_STR(_cpu_name_str),_cpu_name_str, \
@@ -301,6 +302,7 @@ void pc_analysis_json(void *pJson)
 					VAR_TO_STR(_cpu_temperature),_cpu_temperature, \
 					VAR_TO_STR(_ram_load),_ram_load, \
 					VAR_TO_STR(_cpu_load),_cpu_load, \
+					VAR_TO_STR(_gpu_load),_gpu_load, \
 					VAR_TO_STR(_cpu_temperature_unit_celsius),_cpu_temperature_unit_celsius, \
 					VAR_TO_STR(_gpu_temperature_unit_celsius),_gpu_temperature_unit_celsius);
     /*-------------------------------------end---------------------------------------------------*/
