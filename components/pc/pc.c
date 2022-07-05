@@ -81,7 +81,7 @@ void pc_init(void)
  */
 void pc_analysis_json(void *pJson)
 {
-    //taskENTER_CRITICAL(0);
+    taskENTER_CRITICAL(0);
 
     /*-------------------------------------begin---------------------------------------------------*/
     cJSON *root = cJSON_Parse(pJson);
@@ -273,6 +273,8 @@ void pc_analysis_json(void *pJson)
 
     cJSON_Delete(root);
 
+    taskEXIT_CRITICAL(0);
+
 	ESP_LOGI(TAG, 	"\n---------------------------------------------------------\n"\
 					"%s:[%s]\n"\
 					"%s:[%s]\n"\
@@ -307,7 +309,6 @@ void pc_analysis_json(void *pJson)
 					VAR_TO_STR(_gpu_temperature_unit_celsius),_gpu_temperature_unit_celsius);
     /*-------------------------------------end---------------------------------------------------*/
 
-    //taskEXIT_CRITICAL(0);
 }
 
 
