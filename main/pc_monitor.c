@@ -123,7 +123,6 @@ static const char *NVS_FALSE_STR = "false";
 static const char *NVS_JSON_STR = "json";
 
 static char URL[64] = {0};  /*统一资源定位链接，当PC端生成了http server时，通过此url获取json字符串*/
-
 static const char *TAG = "pc_monitor";
 
 /*-------------------------------- my custom -------------------------------------*/
@@ -327,6 +326,109 @@ static void lv_tick_task(void *arg) {
  * 
  */
 static void http_task(void *pvParameters)
+{
+    BaseType_t error = pdFALSE;
+    char *buffer = NULL;
+    esp_err_t err;
+    uint8_t openerr_count = 0;
+    int ip0,ip1,ip2,ip3,port;
+
+    error = xSemaphoreTake(xHttpSemaphore, portMAX_DELAY);  /*当连接上wifi之后，会得到信号量*/
+    if (error != pdTRUE)
+    {
+        while (true);
+    }
+    vSemaphoreDelete(xHttpSemaphore);
+
+    xTaskCreate(gui_task_main, "gui_task_main", 4*1024, (void*)NULL, 1, NULL);
+
+    esp_http_client_config_t config = {
+        .url = URL,
+    };
+    ESP_LOGI(TAG, "url:%s", config.url);
+    esp_http_client_handle_t client;
+
+    while (true)
+    {
+    	client = esp_http_client_init(&config);
+    	if (client != NULL)
+    	{
+    		esp_http_client_set_timeout_ms(client, 1000);
+    		if ((err = esp_http_client_open(client, 0)) == ESP_OK)
+    		{
+		        int content_length =  esp_http_client_fetch_headers(client);
+		        buffer = malloc(content_length + 64);
+				if (buffer == NULL) {
+					ESP_LOGE(TAG, "malloc failed!");
+					esp_http_client_close(client);
+				}
+				else
+				{
+					memset(buffer, 0, content_length);
+					int total_read_len = 0, read_len;
+			        if (total_read_len < content_length && content_length <= MAX_HTTP_RECV_BUFFER_) {
+			            read_len = esp_http_client_read(client, buffer, content_length);
+			            if (read_len <= 0) {
+			                ESP_LOGE(TAG, "Error read data");
+			            }
+			            ESP_LOGD(TAG, "read_len = %d", read_len);
+			        }
+			        ESP_LOGI(TAG, "HTTP Stream reader Status = %d, content_length = %d,url:%s",
+			                        esp_http_client_get_status_code(client),
+			                        esp_http_client_get_content_length(client),
+			                        URL);
+
+			        pc_analysis_json(buffer);
+			        free(buffer);
+
+			        esp_http_client_close(client);    						
+				}
+    		}
+    		else
+    		{
+    			esp_http_client_close(client);
+    			ESP_LOGE(TAG, "Failed to open HTTP connection: %s,url:%s", esp_err_to_name(err),URL);
+    			if (openerr_count < 5)
+    			{
+    				openerr_count++;
+    				if (openerr_count >=5)
+    				{
+    					ip0 = ip1 = ip2 = ip3 = port = 0;
+    					sscanf(URL,"http://%d.%d.%d.%d:%d/data.json",&ip0,&ip1,&ip2,&ip3,&port);
+    					ip3 = 0;
+    				}
+    			}
+    		}
+    	}
+    	else
+    	{
+    		ESP_LOGE(TAG, "esp_http_client_init error");
+    	}
+
+    	esp_http_client_cleanup(client);
+    	vTaskDelay(pdMS_TO_TICKS(1500));
+
+    	if (openerr_count >= 5)
+    	{
+    		memset(URL, 0, sizeof(URL));
+    		ip3++;
+    		if (ip3 > 255)
+    		{
+    			ip3 = 0;
+    		}
+    		sprintf(URL, "http://%d.%d.%d.%d:%d/data.json", ip0,ip1,ip2,ip3,port);
+    	}
+    }
+    
+    vTaskDelete(NULL);
+}
+
+
+/**
+ * @brief 线程：获取pc的json
+ * 
+ */
+static void http_task2(void *pvParameters)
 {
     BaseType_t error = pdFALSE;
     char *buffer = NULL;
