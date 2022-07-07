@@ -332,6 +332,7 @@ static void http_task(void *pvParameters)
     esp_err_t err;
     uint8_t openerr_count = 0;
     int ip0,ip1,ip2,ip3,port;
+    bool is_scan_mode = false;
 
     error = xSemaphoreTake(xHttpSemaphore, portMAX_DELAY);  /*当连接上wifi之后，会得到信号量*/
     if (error != pdTRUE)
@@ -353,7 +354,15 @@ static void http_task(void *pvParameters)
     	client = esp_http_client_init(&config);
     	if (client != NULL)
     	{
-    		esp_http_client_set_timeout_ms(client, 1000);
+    		if (is_scan_mode == true)
+    		{
+    			esp_http_client_set_timeout_ms(client, 400);
+    		}
+    		else
+    		{
+    			esp_http_client_set_timeout_ms(client, 1000);
+    		}
+    		
     		if ((err = esp_http_client_open(client, 0)) == ESP_OK)
     		{
 		        int content_length =  esp_http_client_fetch_headers(client);
@@ -383,6 +392,13 @@ static void http_task(void *pvParameters)
 
 			        esp_http_client_close(client);    						
 				}
+
+
+				if (is_scan_mode == true)
+				{
+					is_scan_mode = false;
+					openerr_count = 0;
+				}
     		}
     		else
     		{
@@ -396,6 +412,7 @@ static void http_task(void *pvParameters)
     					ip0 = ip1 = ip2 = ip3 = port = 0;
     					sscanf(URL,"http://%d.%d.%d.%d:%d/data.json",&ip0,&ip1,&ip2,&ip3,&port);
     					ip3 = 0;
+    					is_scan_mode = true;
     				}
     			}
     		}
@@ -406,9 +423,9 @@ static void http_task(void *pvParameters)
     	}
 
     	esp_http_client_cleanup(client);
-    	vTaskDelay(pdMS_TO_TICKS(1500));
+    	vTaskDelay(pdMS_TO_TICKS((is_scan_mode == true)?(100):(1500)));
 
-    	if (openerr_count >= 5)
+    	if (is_scan_mode == true)
     	{
     		memset(URL, 0, sizeof(URL));
     		ip3++;
