@@ -273,6 +273,7 @@ void pc_analysis_json(void *pJson)
     }
 
 		EXIT:
+		
     cJSON_Delete(root);
 
     taskEXIT_CRITICAL(0);
