@@ -365,40 +365,42 @@ static void http_task(void *pvParameters)
     		
     		if ((err = esp_http_client_open(client, 0)) == ESP_OK)
     		{
-		        int content_length =  esp_http_client_fetch_headers(client);
-		        buffer = malloc(content_length + 64);
-				if (buffer == NULL) {
-					ESP_LOGE(TAG, "malloc failed!");
-					esp_http_client_close(client);
-				}
-				else
-				{
-					memset(buffer, 0, content_length);
-					int total_read_len = 0, read_len;
-			        if (total_read_len < content_length && content_length <= MAX_HTTP_RECV_BUFFER_) {
-			            read_len = esp_http_client_read(client, buffer, content_length);
-			            if (read_len <= 0) {
-			                ESP_LOGE(TAG, "Error read data");
-			            }
-			            ESP_LOGD(TAG, "read_len = %d", read_len);
-			        }
-			        ESP_LOGI(TAG, "HTTP Stream reader Status = %d, content_length = %d,url:%s",
-			                        esp_http_client_get_status_code(client),
-			                        esp_http_client_get_content_length(client),
-			                        URL);
+	        int content_length =  esp_http_client_fetch_headers(client);
+	        buffer = malloc(content_length + 128);
+					if (buffer == NULL) {
+						ESP_LOGE(TAG, "malloc failed!");
+						esp_http_client_close(client);
+					}
+					else
+					{
+						memset(buffer, 0, content_length);
+						int total_read_len = 0, read_len;
+		        if (total_read_len < content_length && content_length <= MAX_HTTP_RECV_BUFFER_) {
+	            read_len = esp_http_client_read(client, buffer, content_length);
+	            if (read_len <= 0) {
+	                ESP_LOGE(TAG, "Error read data");
+	            }
+	            else
+	            {
+	            	pc_analysis_json(buffer);
+	            }
+		        }
+		        ESP_LOGI(TAG, "HTTP Stream reader Status = %d, content_length = %d,url:%s",
+		                        esp_http_client_get_status_code(client),
+		                        esp_http_client_get_content_length(client),
+		                        URL);
 
-			        pc_analysis_json(buffer);
-			        free(buffer);
+		        free(buffer);
 
-			        esp_http_client_close(client);    						
-				}
+		        esp_http_client_close(client);    						
+					}
 
 
-				if (is_scan_mode == true)
-				{
-					is_scan_mode = false;
-					openerr_count = 0;
-				}
+					if (is_scan_mode == true)
+					{
+						is_scan_mode = false;
+						openerr_count = 0;
+					}
     		}
     		else
     		{
