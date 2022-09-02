@@ -374,20 +374,23 @@ static void http_task(void *pvParameters)
 					else
 					{
 						memset(buffer, 0, content_length);
-						int total_read_len = 0, read_len;
-		        if (total_read_len < content_length && content_length <= MAX_HTTP_RECV_BUFFER_) {
-	            read_len = esp_http_client_read(client, buffer, content_length);
-	            if (read_len <= 0) {
-	                ESP_LOGE(TAG, "Error read data");
-	            }
-	            else
-	            {
-	            	pc_analysis_json(buffer);
-	            }
-		        }
-		        ESP_LOGI(TAG, "HTTP Stream reader Status = %d, content_length = %d,url:%s",
-		                        esp_http_client_get_status_code(client),
-		                        esp_http_client_get_content_length(client),
+						int read_len, status_code_, content_length_;
+						
+            read_len = esp_http_client_read(client, buffer, content_length);
+            status_code_ = esp_http_client_get_status_code(client);
+            content_length_ = esp_http_client_get_content_length(client);
+            if ((read_len <= 0) || (status_code_ <= 0) || (content_length_ <= 0)) {
+                ESP_LOGE(TAG, "Error read data");
+            }
+            else
+            {
+            	pc_analysis_json(buffer);
+            }
+		        
+		        ESP_LOGI(TAG, "HTTP Stream reader Status = %d, content_length = %d, read_len = %d, url:%s",
+		                        status_code_,
+		                        content_length_,
+		                        read_len,
 		                        URL);
 
 		        free(buffer);

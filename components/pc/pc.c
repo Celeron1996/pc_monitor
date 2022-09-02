@@ -79,16 +79,17 @@ void pc_init(void)
  * @brief 解析json数据，得到基本数据
  * 
  */
+#define PC_CJSON_CHECK(value)	do{if(value == NULL){goto EXIT;}}while(0)
 void pc_analysis_json(void *pJson)
 {
     taskENTER_CRITICAL(0);
 
     /*-------------------------------------begin---------------------------------------------------*/
-    cJSON *root = cJSON_Parse(pJson);
-    cJSON *children = cJSON_GetObjectItem(root, "Children");
-    cJSON *pc = cJSON_GetArrayItem(children, 0);
-    cJSON *pc_name = cJSON_GetObjectItem(pc, "Text");
-    cJSON *pc_sensors = cJSON_GetObjectItem(pc, "Children");
+    cJSON *root = cJSON_Parse(pJson);PC_CJSON_CHECK(root);
+    cJSON *children = cJSON_GetObjectItem(root, "Children");PC_CJSON_CHECK(children);
+    cJSON *pc = cJSON_GetArrayItem(children, 0);PC_CJSON_CHECK(pc);
+    cJSON *pc_name = cJSON_GetObjectItem(pc, "Text");PC_CJSON_CHECK(pc_name);
+    cJSON *pc_sensors = cJSON_GetObjectItem(pc, "Children");PC_CJSON_CHECK(pc_sensors);
     int sensor_count = cJSON_GetArraySize(pc_sensors);
 
     memset(_pc_name_str, 0, sizeof(_pc_name_str));
@@ -271,6 +272,7 @@ void pc_analysis_json(void *pJson)
         /*================================ 遍历查找gpu 属性 end ======================================*/
     }
 
+		EXIT:
     cJSON_Delete(root);
 
     taskEXIT_CRITICAL(0);
