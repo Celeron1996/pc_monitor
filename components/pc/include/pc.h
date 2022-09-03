@@ -15,5 +15,9 @@ bool pc_is_gpu_temperature_unit_celsius(void);
 char *pc_get_gpu_load_str(void);
 char *pc_get_cpu_load_str(void);
 char *pc_get_ram_load_str(void);
+char *pc_get_cpu_name_str(void);
+char *pc_get_gpu_name_str(void);
+char *pc_get_name_str(void);
+char *pc_get_mainboard_name_str(void);
 
 #endif

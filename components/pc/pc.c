@@ -47,6 +47,8 @@ static int pc_str_to_int(char *pStr);
 static char _pc_name_str[64];
 static char _cpu_name_str[64];
 static char _gpu_name_str[64];
+static char _mainboard_name_str[64];
+
 
 static char _ram_load_str[16] = "0%";
 static char _cpu_load_str[16] = "0%";
@@ -93,6 +95,7 @@ void pc_analysis_json(void *pJson)
     int sensor_count = cJSON_GetArraySize(pc_sensors);
 
     memset(_pc_name_str, 0, sizeof(_pc_name_str));
+    memset(_mainboard_name_str, 0, sizeof(_mainboard_name_str));
     memset(_cpu_name_str, 0, sizeof(_cpu_name_str));
     memset(_gpu_name_str, 0, sizeof(_gpu_name_str));
     memset(_cpu_temperature_str, 0, sizeof(_cpu_temperature_str));
@@ -106,6 +109,22 @@ void pc_analysis_json(void *pJson)
 
     for (int i = 0 ; i < sensor_count; i++)
     {
+
+				/*================================ 遍历查找mainboard 属性 begin ======================================*/
+				cJSON *mainboard = cJSON_GetArrayItem(pc_sensors, i);
+				cJSON *mainboard_image = cJSON_GetObjectItem(mainboard, "ImageURL");
+				if ((mainboard_image != NULL) && (strcmp(mainboard_image->valuestring, "images_icon/mainboard.png") == 0))
+				{				
+					cJSON *mainboard_load_text = cJSON_GetObjectItem(mainboard, "Text");
+					if (mainboard_load_text != NULL)
+					{
+						memcpy(_mainboard_name_str, mainboard_load_text->valuestring,
+							strlen(mainboard_load_text->valuestring)>sizeof(_mainboard_name_str)?sizeof(_mainboard_name_str):strlen(mainboard_load_text->valuestring));
+					}
+						
+				}
+				/*================================ 遍历查找mainboard 属性 end ======================================*/
+
         /*================================ 遍历查找cpu 属性 begin ======================================*/
         cJSON *cpu = cJSON_GetArrayItem(pc_sensors, i);
         cJSON *cpu_image = cJSON_GetObjectItem(cpu, "ImageURL");
@@ -287,6 +306,7 @@ void pc_analysis_json(void *pJson)
 					"%s:[%s]\n"\
 					"%s:[%s]\n"\
 					"%s:[%s]\n"\
+					"%s:[%s]\n"\
 					"%s:[%d]\n"\
 					"%s:[%d]\n"\
 					"%s:[%d]\n"\
@@ -294,8 +314,9 @@ void pc_analysis_json(void *pJson)
 					"%s:[%d]\n"\
 					"%s:[%d]\n"\
 					"%s:[%d]\n"\
-					"---------------------------------------------------------\n",\
+					"---------------------------------------------------------\n",\					
 					VAR_TO_STR(_pc_name_str),_pc_name_str, \
+					VAR_TO_STR(_mainboard_name_str),_mainboard_name_str, \
 					VAR_TO_STR(_cpu_name_str),_cpu_name_str, \
 					VAR_TO_STR(_gpu_name_str),_gpu_name_str, \
 					VAR_TO_STR(_ram_load_str),_ram_load_str, \
@@ -457,3 +478,45 @@ char *pc_get_ram_load_str(void)
 {
     return _ram_load_str;
 }
+
+/**
+ * @brief 获取cpu name string
+ * @return 返回字符串指针
+ * 
+ */
+char *pc_get_cpu_name_str(void)
+{
+    return _cpu_name_str;
+}
+
+/**
+ * @brief 获取gpu name string
+ * @return 返回字符串指针
+ * 
+ */
+char *pc_get_gpu_name_str(void)
+{
+    return _gpu_name_str;
+}
+
+/**
+ * @brief 获取pc name string
+ * @return 返回字符串指针
+ * 
+ */
+char *pc_get_name_str(void)
+{
+    return _pc_name_str;
+}
+
+/**
+ * @brief 获取mainboard name string
+ * @return 返回字符串指针
+ * 
+ */
+char *pc_get_mainboard_name_str(void)
+{
+    return _mainboard_name_str;
+}
+
+
