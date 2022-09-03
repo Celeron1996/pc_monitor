@@ -72,6 +72,8 @@ static void create_demo_application(void);
 static void my_style(void);
 static void create_gui_task_loading(void);
 static void gui_task_main(void *pvParameters);
+static void update_ip_address_to_flash(int ip0, int ip1, int ip2, int ip3);
+
 
 /**
  * @brief 创建一个信号量来处理lvgl的并发调用，如果想从其他多个线程/任务调用lvgl
@@ -321,6 +323,75 @@ static void lv_tick_task(void *arg) {
     lv_tick_inc(LV_TICK_PERIOD_MS);
 }
 
+
+/**
+ * @brief 线程：将最新连接成功的ip地址写入flash
+ * 
+ */
+static void update_ip_address_to_flash(int ip0, int ip1, int ip2, int ip3)
+{
+		/*--------------------step1:首先，从nvs中获取wifi名称、密码，ip地址等--------------*/
+		esp_err_t err;
+		char buffer[128];
+		size_t length;
+		nvs_handle_t nvs_handle;
+		char ip_str[] = "255.255.255.255";
+
+		/*打开nvs*/
+		err = nvs_open(NVS_NAME_STR, NVS_READWRITE, &nvs_handle);
+		if(err != ESP_OK)
+		{
+				ESP_LOGE(TAG, "nvs_open error, code = %d", err);
+				while(1);
+		}
+
+		/*获取json*/
+		length = sizeof(buffer);
+		memset(buffer, 0, sizeof(buffer));
+		err = nvs_get_str(nvs_handle, NVS_JSON_STR, buffer, &length);
+		if(err == ESP_OK)
+		{
+				ESP_LOGI(TAG, "get nvs wifi json success! json = %s", buffer);
+		}
+		else
+		{
+				ESP_LOGE(TAG, "nvs active error, code = %d", err);
+				goto flag_err;
+		}
+
+		/*------------------------step2:获取成功，解析json----------------------------------*/
+		cJSON *json_root = cJSON_Parse(buffer);
+
+		memset(ip_str, 0, sizeof(ip_str));
+		sprintf(ip_str,"%d.%d.%d.%d",ip0,ip1,ip2,ip3);
+		cJSON_SetValuestring(cJSON_GetObjectItem(json_root, "ip_address"), (const char *)ip_str);
+
+		err = nvs_set_str(nvs_handle, NVS_JSON_STR, cJSON_PrintUnformatted(json_root));
+		if (err == ESP_OK)
+		{
+			ESP_LOGI(TAG, "update json to flash success! json = %s", cJSON_PrintUnformatted(json_root));
+		}
+		else
+		{
+			ESP_LOGE(TAG, "update json to flash error, code = %d", err);
+			goto flag_err;
+		}
+
+		nvs_close(nvs_handle);
+
+		cJSON_Delete(json_root);
+
+		return;
+		
+		flag_err:
+		nvs_set_str(nvs_handle, NVS_ACTIVE_STR, NVS_FALSE_STR);
+		nvs_commit(nvs_handle);
+		nvs_close(nvs_handle);
+		ESP_LOGE(TAG, "update_ip_address_to_flash error");
+}
+
+
+
 /**
  * @brief 线程：获取pc的json
  * 
@@ -401,6 +472,7 @@ static void http_task(void *pvParameters)
 
 					if (is_scan_mode == true)
 					{
+						update_ip_address_to_flash(ip0, ip1, ip2, ip3);
 						is_scan_mode = false;
 						openerr_count = 0;
 					}
@@ -416,7 +488,6 @@ static void http_task(void *pvParameters)
     				{
     					ip0 = ip1 = ip2 = ip3 = port = 0;
     					sscanf(URL,"http://%d.%d.%d.%d:%d/data.json",&ip0,&ip1,&ip2,&ip3,&port);
-    					ip3 = 0;
     					is_scan_mode = true;
     				}
     			}
@@ -445,94 +516,6 @@ static void http_task(void *pvParameters)
     vTaskDelete(NULL);
 }
 
-
-/**
- * @brief 线程：获取pc的json
- * 
- */
-static void http_task2(void *pvParameters)
-{
-    BaseType_t error = pdFALSE;
-    char *buffer = NULL;
-
-    error = xSemaphoreTake(xHttpSemaphore, portMAX_DELAY);  /*当连接上wifi之后，会得到信号量*/
-    if (error != pdTRUE)
-    {
-        while (true);
-    }
-    vSemaphoreDelete(xHttpSemaphore);
-
-    xTaskCreate(gui_task_main, "gui_task_main", 4*1024, (void*)NULL, 1, NULL);
-    
-	/*
-    buffer = malloc(MAX_HTTP_RECV_BUFFER_);
-	if (buffer == NULL) {
-		ESP_LOGE(TAG, "Cannot malloc http receive buffer");
-		while (true);
-	}
-	*/
-    
-    esp_http_client_config_t config = {
-        .url = URL,
-    };
-    ESP_LOGI(TAG, "url:%s", config.url);
-    esp_http_client_handle_t client = esp_http_client_init(&config);
-    if (client == NULL)
-    {
-        while (true)
-        {
-            vTaskDelay(pdMS_TO_TICKS(1000));
-            ESP_LOGE(TAG, "esp_http_client_init error");
-        }
-    }
-
-    while (true) {
-        esp_err_t err;
-        
-        while ((err = esp_http_client_open(client, 0)) != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to open HTTP connection: %s", esp_err_to_name(err));
-            //free(buffer);
-            //return;
-            esp_http_client_close(client);
-            vTaskDelay(pdMS_TO_TICKS(1000));
-        }
-
-        int content_length =  esp_http_client_fetch_headers(client);
-        buffer = malloc(content_length + 64);
-		if (buffer == NULL) {
-			ESP_LOGE(TAG, "Cannot malloc http receive buffer");
-			esp_http_client_close(client);
-			vTaskDelay(pdMS_TO_TICKS(1500));
-			continue;
-		}
-		memset(buffer, 0, content_length);
-
-        int total_read_len = 0, read_len;
-        if (total_read_len < content_length && content_length <= MAX_HTTP_RECV_BUFFER_) {
-            read_len = esp_http_client_read(client, buffer, content_length);
-            if (read_len <= 0) {
-                ESP_LOGE(TAG, "Error read data");
-            }
-            ESP_LOGD(TAG, "read_len = %d", read_len);
-        }
-        ESP_LOGI(TAG, "HTTP Stream reader Status = %d, content_length = %d",
-                        esp_http_client_get_status_code(client),
-                        esp_http_client_get_content_length(client));
-
-        pc_analysis_json(buffer);
-        free(buffer);
-
-        esp_http_client_close(client);
-             
-        vTaskDelay(pdMS_TO_TICKS(1500));
-    }
-
-    esp_http_client_cleanup(client);   
-
-    //free(buffer);
-    ESP_LOGI(TAG, "Finish http example");
-    vTaskDelete(NULL);
-}
 
 /**
  * @brief wifi 配置向导，用于获取wifi名称、密码，并进行连接配置
