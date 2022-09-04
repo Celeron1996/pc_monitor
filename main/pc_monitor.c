@@ -1244,8 +1244,6 @@ static void gui_task_main(void *pvParameters)
     
 
 		/* 创建文本，显示pc详细信息 */
-
-		vTaskDelay(pdMS_TO_TICKS(4000));	/* 等待连接上http、获取json、解析json */
     lv_obj_t *label_pc_info = lv_label_create(lv_scr_act(), NULL);
     lv_obj_set_pos(label_pc_info, lv_obj_get_width(lmeter_cpu), 0);
 		lv_label_set_long_mode(label_pc_info, LV_LABEL_LONG_SROLL);
@@ -1282,6 +1280,9 @@ static void gui_task_main(void *pvParameters)
 
         lv_label_set_text_fmt(label_chart, "#ff0000 CPU:%s# #00ff00 GPU:%s# #0000ff RAM:%s",
                                 pc_get_cpu_load_str(), pc_get_gpu_load_str(), pc_get_ram_load_str());
+
+		    lv_label_set_text_fmt(label_pc_info, "pc:%s\n#0000ff mainboard:%s#\n#ff0000 cpu:%s#\n#00ff00 gpu:%s#",
+		    											pc_get_name_str(), pc_get_mainboard_name_str(), pc_get_cpu_name_str(), pc_get_gpu_name_str());                                
 
         lv_chart_set_next(chart, chart_ser_cpu_load, cpu_load);
         lv_chart_set_next(chart, chart_ser_gpu_load, gpu_load);
