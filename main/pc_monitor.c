@@ -1235,22 +1235,22 @@ static void gui_task_main(void *pvParameters)
     lv_chart_series_t * chart_ser_ram_load = lv_chart_add_series(chart, LV_COLOR_BLUE);
 
     lv_obj_t *label_chart = lv_label_create(chart, NULL);
-    lv_label_set_long_mode(label_chart, LV_LABEL_LONG_SROLL);
+    lv_label_set_long_mode(label_chart, LV_LABEL_LONG_SROLL_CIRC);
     lv_obj_align(label_chart, NULL, LV_ALIGN_IN_TOP_LEFT, 0 ,0);
     lv_obj_set_width(label_chart, lv_obj_get_width(chart));
     lv_label_set_recolor(label_chart, true);
-    lv_label_set_text_fmt(label_chart, "#ff0000 CPU:%s# #00ff00 GPU:%s#\n#0000ff RAM:%s",
+    lv_label_set_text_fmt(label_chart, "#ff0000 处理器:%s# #00ff00 显卡:%s#\n#0000ff 内存:%s",
                             pc_get_cpu_load_str(), pc_get_gpu_load_str(), pc_get_ram_load_str());
     
 
 		/* 创建文本，显示pc详细信息 */
     lv_obj_t *label_pc_info = lv_label_create(lv_scr_act(), NULL);
     lv_obj_set_pos(label_pc_info, lv_obj_get_width(lmeter_cpu), 0);
-		lv_label_set_long_mode(label_pc_info, LV_LABEL_LONG_SROLL);
+		lv_label_set_long_mode(label_pc_info, LV_LABEL_LONG_SROLL_CIRC);
 		lv_obj_set_size(label_pc_info, 120, 120);
 		lv_label_set_recolor(label_pc_info, true);
-    lv_label_set_text_fmt(label_pc_info, "pc:%s\n#0000ff mainboard:%s#\n#ff0000 cpu:%s#\n#00ff00 gpu:%s#",
-    											pc_get_name_str(), pc_get_mainboard_name_str(), pc_get_cpu_name_str(), pc_get_gpu_name_str());
+    lv_label_set_text_fmt(label_pc_info, "电脑:%s\n#0000ff 主板:%s#\n#ff0000 处理器:%s#\n#00ff00 显卡:%s#",
+		    									pc_get_name_str(), pc_get_mainboard_name_str(), pc_get_cpu_name_str(), pc_get_gpu_name_str());
 
     while (true)
     {
@@ -1278,10 +1278,10 @@ static void gui_task_main(void *pvParameters)
         lv_obj_align(label_cpu_temper, NULL, LV_ALIGN_CENTER, 0, 0);
         //lv_obj_align(label_gpu_temper, NULL, LV_ALIGN_CENTER, 0, 0);
 
-        lv_label_set_text_fmt(label_chart, "#ff0000 CPU:%s# #00ff00 GPU:%s# #0000ff RAM:%s",
+        lv_label_set_text_fmt(label_chart, "#ff0000 处理器:%s# #00ff00 显卡:%s# #0000ff 内存:%s",
                                 pc_get_cpu_load_str(), pc_get_gpu_load_str(), pc_get_ram_load_str());
 
-		    lv_label_set_text_fmt(label_pc_info, "pc:%s\n#0000ff mainboard:%s#\n#ff0000 cpu:%s#\n#00ff00 gpu:%s#",
+		    lv_label_set_text_fmt(label_pc_info, "电脑:%s\n#0000ff 主板:%s#\n#ff0000 处理器:%s#\n#00ff00 显卡:%s#",
 		    											pc_get_name_str(), pc_get_mainboard_name_str(), pc_get_cpu_name_str(), pc_get_gpu_name_str());                                
 
         lv_chart_set_next(chart, chart_ser_cpu_load, cpu_load);
