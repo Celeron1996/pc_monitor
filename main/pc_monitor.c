@@ -499,7 +499,7 @@ static void http_task(void *pvParameters)
     	}
 
     	esp_http_client_cleanup(client);
-    	vTaskDelay(pdMS_TO_TICKS((is_scan_mode == true)?(100):(1500)));
+    	vTaskDelay(pdMS_TO_TICKS((is_scan_mode == true)?(100):(3000)));
 
     	if (is_scan_mode == true)
     	{
@@ -1160,21 +1160,19 @@ static void create_gui_task_main(void)
 static void gui_task_main(void *pvParameters)
 {
     int cpu_temper = 0;
-    int gpu_temper = 0;
     int ram_load = 0;
     int cpu_load = 0;
     int gpu_load = 0;
+    int counter_lmeter, counter_info;
 
     /* 设置表盘样式 */
     static lv_style_t style_cpu_lmeter;
-    static lv_style_t style_gpu_lmeter;
     lv_style_init(&style_cpu_lmeter);
     lv_style_set_line_width(&style_cpu_lmeter, LV_STATE_DEFAULT, 4);    /*设置表盘小于value的刻度宽度*/
     lv_style_set_scale_end_line_width(&style_cpu_lmeter, LV_STATE_DEFAULT, 4);    /*设置表盘大于value的刻度宽度*/
     lv_style_set_scale_width(&style_cpu_lmeter, LV_STATE_DEFAULT, 16);  /*设置全部刻度线的长度*/
     lv_style_set_line_color(&style_cpu_lmeter, LV_STATE_DEFAULT, MY_COLOR_SKYBLUE);/*设置刻度小于value部分刻度线的颜色*/
     lv_style_set_scale_end_color(&style_cpu_lmeter, LV_STATE_DEFAULT, MY_COLOR_BACKBLACK);/*设置刻度大于value部分刻度线的颜色*/
-    lv_style_copy(&style_gpu_lmeter, &style_cpu_lmeter);
     
     /* 创建CPU 表盘 */
     lv_obj_t *lmeter_cpu = lv_linemeter_create(lv_scr_act(), NULL);
@@ -1194,26 +1192,6 @@ static void gui_task_main(void *pvParameters)
 
     lv_obj_add_style(lmeter_cpu, LV_OBJ_PART_MAIN, &style_cpu_lmeter);
 
-    /* 创建GPU 表盘 */
-    #if(0)
-    lv_obj_t *lmeter_gpu = lv_linemeter_create(lv_scr_act(), NULL);
-    lv_linemeter_set_range(lmeter_gpu, 0, 100);                   /*Set the range*/
-    lv_linemeter_set_value(lmeter_gpu, 80);                       /*Set the current value*/
-    lv_linemeter_set_scale(lmeter_gpu, 280, 100);                  /*Set the angle and number of lines*/
-    lv_obj_set_size(lmeter_gpu, 120, 120);
-    lv_obj_align(lmeter_gpu, NULL, LV_ALIGN_IN_TOP_RIGHT, 0, 0);
-
-    lv_obj_t *label_gpu_title = lv_label_create(lmeter_gpu, NULL);
-    lv_label_set_text(label_gpu_title, "GPU");
-    lv_obj_align(label_gpu_title, NULL, LV_ALIGN_IN_BOTTOM_MID, 0, -16);
-
-    lv_obj_t *label_gpu_temper = lv_label_create(lmeter_gpu, NULL);
-    lv_label_set_text_fmt(label_gpu_temper, "%s", pc_get_gpu_temperature_str());
-    lv_obj_align(label_gpu_temper, NULL, LV_ALIGN_CENTER, 0, 0);
-
-    lv_obj_add_style(lmeter_gpu, LV_OBJ_PART_MAIN, &style_gpu_lmeter);
-    #endif
-
     /* 创建图表 */
     /*Create a chart*/
     lv_obj_t * chart;
@@ -1221,7 +1199,7 @@ static void gui_task_main(void *pvParameters)
     lv_obj_set_size(chart, 240, 120);
     lv_obj_align(chart, NULL, LV_ALIGN_IN_BOTTOM_LEFT, 0, 0);
     lv_chart_set_type(chart, LV_CHART_TYPE_LINE);   /*Show lines and points too*/
-    lv_chart_set_div_line_count(chart, 0, 0);
+    lv_chart_set_div_line_count(chart, 4, 8);
 
     /*Add a faded are effect*/
     lv_obj_set_style_local_bg_opa(chart, LV_CHART_PART_SERIES, LV_STATE_DEFAULT, LV_OPA_50); /*Max. opa.*/
@@ -1241,7 +1219,6 @@ static void gui_task_main(void *pvParameters)
     lv_label_set_recolor(label_chart, true);
     lv_label_set_text_fmt(label_chart, "#ff0000 处理器:%s# #00ff00 显卡:%s#\n#0000ff 内存:%s",
                             pc_get_cpu_load_str(), pc_get_gpu_load_str(), pc_get_ram_load_str());
-    
 
 		/* 创建文本，显示pc详细信息 */
     lv_obj_t *label_pc_info = lv_label_create(lv_scr_act(), NULL);
@@ -1252,42 +1229,50 @@ static void gui_task_main(void *pvParameters)
     lv_label_set_text_fmt(label_pc_info, "电脑:%s\n#0000ff 主板:%s#\n#ff0000 处理器:%s#\n#00ff00 显卡:%s#",
 		    									pc_get_name_str(), pc_get_mainboard_name_str(), pc_get_cpu_name_str(), pc_get_gpu_name_str());
 
+		counter_info = 10000;
+		counter_lmeter = 10000;
     while (true)
     {
-        /* get data */
-        cpu_temper = pc_get_cpu_temperature();
-        gpu_temper = pc_get_gpu_temperature();
-        if (!(pc_is_cpu_temperature_unit_celsius()))
-        {
-            cpu_temper = ((cpu_temper - 32)*5)/9;   /*表盘是满了是100，按照摄氏度来的，华氏度的话转成摄氏度: 华氏度 = 32℉ + (摄氏度 * 1.8) */
-        }
-        if (!(pc_is_gpu_temperature_unit_celsius()))
-        {
-            gpu_temper = ((gpu_temper - 32)*5)/9;   /*表盘是满了是100，按照摄氏度来的，华氏度的话转成摄氏度: 华氏度 = 32℉ + (摄氏度 * 1.8) */
-        }
+    		if (counter_lmeter > 3)
+    		{
+    			counter_lmeter = 0;
+						/* get data */
+						cpu_temper = pc_get_cpu_temperature();
+						if (!(pc_is_cpu_temperature_unit_celsius()))
+						{
+								cpu_temper = ((cpu_temper - 32)*5)/9; 	/*表盘是满了是100，按照摄氏度来的，华氏度的话转成摄氏度: 华氏度 = 32℉ + (摄氏度 * 1.8) */
+						}
+						
+		        /* set data to gui */
+		        lv_linemeter_set_value(lmeter_cpu, cpu_temper);
+		        
+		        lv_label_set_text_fmt(label_cpu_temper, "%s", pc_get_cpu_temperature_str());
+		        
+		        lv_obj_align(label_cpu_temper, NULL, LV_ALIGN_CENTER, 0, 0);    			
+    		}
+
+    		if (counter_info > 10)
+    		{
+    			counter_info = 0;
+
+			    lv_label_set_text_fmt(label_pc_info, "电脑:%s\n#0000ff 主板:%s#\n#ff0000 处理器:%s#\n#00ff00 显卡:%s#",
+			    											pc_get_name_str(), pc_get_mainboard_name_str(), pc_get_cpu_name_str(), pc_get_gpu_name_str());       			
+    		}
+
 
         ram_load = pc_get_ram_load();
         cpu_load = pc_get_cpu_load();
         gpu_load = pc_get_gpu_load();
 
-        /* set data to gui */
-        lv_linemeter_set_value(lmeter_cpu, cpu_temper);
-        //lv_linemeter_set_value(lmeter_gpu, gpu_temper);
-        lv_label_set_text_fmt(label_cpu_temper, "%s", pc_get_cpu_temperature_str());
-        //lv_label_set_text_fmt(label_gpu_temper, "%s", pc_get_gpu_temperature_str());
-        lv_obj_align(label_cpu_temper, NULL, LV_ALIGN_CENTER, 0, 0);
-        //lv_obj_align(label_gpu_temper, NULL, LV_ALIGN_CENTER, 0, 0);
-
         lv_label_set_text_fmt(label_chart, "#ff0000 处理器:%s# #00ff00 显卡:%s# #0000ff 内存:%s",
                                 pc_get_cpu_load_str(), pc_get_gpu_load_str(), pc_get_ram_load_str());
-
-		    lv_label_set_text_fmt(label_pc_info, "电脑:%s\n#0000ff 主板:%s#\n#ff0000 处理器:%s#\n#00ff00 显卡:%s#",
-		    											pc_get_name_str(), pc_get_mainboard_name_str(), pc_get_cpu_name_str(), pc_get_gpu_name_str());                                
-
+                             
         lv_chart_set_next(chart, chart_ser_cpu_load, cpu_load);
         lv_chart_set_next(chart, chart_ser_gpu_load, gpu_load);
         lv_chart_set_next(chart, chart_ser_ram_load, ram_load);
 
         vTaskDelay(pdMS_TO_TICKS(1000));
+        counter_lmeter++;
+        counter_info++;
     }
 }
