@@ -157,7 +157,7 @@ void app_main(void)
 
     pc_init();
 
-    xTaskCreatePinnedToCore(guiTask, "guiTask", 4*1024, (void*)NULL, 0, NULL, 1);
+    xTaskCreate(guiTask, "guiTask", 4*1024, (void*)NULL, 0, NULL);
 
     vTaskDelay(pdMS_TO_TICKS(3000));
 
