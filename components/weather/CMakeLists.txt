@@ -1,2 +1,3 @@
 idf_component_register(SRCS "weather.c"
-                    INCLUDE_DIRS "include")
+                    INCLUDE_DIRS "include"
+					REQUIRES json)

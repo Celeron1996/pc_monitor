@@ -20,7 +20,8 @@
 #include "lwip/netdb.h"
 #include "lwip/dns.h"
 
-
+#include "cJSON.h"
+#include "string.h"
 
 
 static void weather_analysis_json(void *pJson);
@@ -45,7 +46,7 @@ static const char *REQUEST = "GET " WEB_PATH " HTTP/1.0\r\n"
     "User-Agent: esp-idf/1.0 esp32\r\n"
     "\r\n";
 
-static char recv_buf[128];		/* 存储天气服务的json */
+static char recv_buf[1024];		/* 存储天气服务的json */
 
 struct weather_struct{
 	char private_key[128];			/* 平台私人密钥 */
@@ -132,12 +133,14 @@ void weather_task(void *pvParameters)
         ESP_LOGI(TAG, "... set socket receiving timeout success");
 
         /* Read HTTP response */
+        bzero(recv_buf, sizeof(recv_buf));
+        char *p_tempbuf = recv_buf;
         do {
-            bzero(recv_buf, sizeof(recv_buf));
-            r = read(s, recv_buf, sizeof(recv_buf)-1);
+            
+            r = read(s, p_tempbuf, 64);
+            p_tempbuf += r;
         } while(r > 0);
 
-				ESP_LOGI(TAG, "read weather data:%s", recv_buf);
 				weather_analysis_json(recv_buf);
 				
         ESP_LOGI(TAG, "... done reading from socket. Last read return=%d errno=%d.", r, errno);
@@ -152,21 +155,64 @@ void weather_task(void *pvParameters)
 
 
 
+/********************************
+HTTP/1.1 200 OK
+Date: Wed, 07 Sep 2022 18:36:09 GMT
+Content-Type: application/json; charset=utf-8
+Content-Length: 256
+Connection: close
+access-control-allow-origin: *
+etag: W/"100-pYXDgNxz7W6RNJcYkE0R71620yM"
+x-powered-by: Express
+x-ratelimit-limit: 20;w=60
+x-ratelimit-remaining: 13
+x-ratelimit-reset: 12.811
+x-request-id: FxKn2o1XWT+gdvtw8kzD
+x-tenant-id: 003d9450-946c-4381-b545-2ccb77207347
 
+{"results":[{"location":{"id":"WX4FBXXFKE4F","name":"北京","country":"CN","path":"北京,北京,中国","timezone":"Asia/Shanghai","timezone_offset":"+08:00"},"now":{"text":"晴","code":"1","temperature":"17"},"last_update":"2022-09-08T02:20:11+08:00"}]}
+********************************/
 #define WEATHER_CJSON_CHECK(value)	do{if(value == NULL){goto EXIT;}}while(0)
 static void weather_analysis_json(void *pJson)
 {
-	cJSON *root = cJSON_Parse(pJson);WEATHER_CJSON_CHECK(root);
-//	cJSON *results = cJSON_GetObjectItem(root, "results");
+	char *p_temp = strstr(pJson, "results");
+	p_temp -= 2;
+	cJSON *root = cJSON_Parse(p_temp);WEATHER_CJSON_CHECK(root);
+	cJSON *results = cJSON_GetObjectItem(root, "results");WEATHER_CJSON_CHECK(results);
+	cJSON *array_0 = cJSON_GetArrayItem(results, 0);WEATHER_CJSON_CHECK(array_0);
+	
+	cJSON *location = cJSON_GetObjectItem(array_0, "location");
+	cJSON *now = cJSON_GetObjectItem(array_0, "now");
+	cJSON *name = cJSON_GetObjectItem(location, "name");
+	cJSON *text = cJSON_GetObjectItem(now, "text");
+	cJSON *code = cJSON_GetObjectItem(now, "code");
+	cJSON *temperature = cJSON_GetObjectItem(now, "temperature");
 
-	cJSON *name = cJSON_GetObjectItem(root, "name");
-	if (name != NULL)
+	if ((name != NULL) && (strlen(name->valuestring) <= sizeof(p_weather->city_network)))
 	{
-		ESP_LOGI(TAG, "name = %s", name->valuestring);
+		memset(p_weather->city_network, 0, sizeof(p_weather->city_network));
+		strcpy(p_weather->city_network, name->valuestring);
 	}
 
-	vTaskDelay(1000);
+	if ((text != NULL) && (strlen(text->valuestring) <= sizeof(p_weather->text)))
+	{
+		memset(p_weather->text, 0, sizeof(p_weather->text));
+		strcpy(p_weather->text, text->valuestring);
+	}
 
+	if ((code != NULL) && (strlen(code->valuestring) <= sizeof(p_weather->code)))
+	{
+		memset(p_weather->code, 0, sizeof(p_weather->code));
+		strcpy(p_weather->code, code->valuestring);
+	}
+
+	if ((temperature != NULL) && (strlen(temperature->valuestring) <= sizeof(p_weather->temperature)))
+	{
+		memset(p_weather->temperature, 0, sizeof(p_weather->temperature));
+		strcpy(p_weather->temperature, temperature->valuestring);
+	}
+
+	EXIT:
 	cJSON_Delete(root);
 }
 
