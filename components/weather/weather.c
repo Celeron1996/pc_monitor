@@ -21,6 +21,12 @@
 #include "lwip/dns.h"
 
 
+
+
+static void weather_analysis_json(void *pJson);
+
+
+
 /* seniverse api arg */
 #define PRIVATE_KEY	"key=S9wcdovBWmKYunRle"
 #define CITY_NAME	"location=beijing"
@@ -132,6 +138,8 @@ void weather_task(void *pvParameters)
         } while(r > 0);
 
 				ESP_LOGI(TAG, "read weather data:%s", recv_buf);
+				weather_analysis_json(recv_buf);
+				
         ESP_LOGI(TAG, "... done reading from socket. Last read return=%d errno=%d.", r, errno);
         close(s);
         for(int countdown = 10; countdown >= 0; countdown--) {
@@ -140,5 +148,25 @@ void weather_task(void *pvParameters)
         }
         ESP_LOGI(TAG, "Starting again!");
     }
+}
+
+
+
+
+#define WEATHER_CJSON_CHECK(value)	do{if(value == NULL){goto EXIT;}}while(0)
+static void weather_analysis_json(void *pJson)
+{
+	cJSON *root = cJSON_Parse(pJson);WEATHER_CJSON_CHECK(root);
+//	cJSON *results = cJSON_GetObjectItem(root, "results");
+
+	cJSON *name = cJSON_GetObjectItem(root, "name");
+	if (name != NULL)
+	{
+		ESP_LOGI(TAG, "name = %s", name->valuestring);
+	}
+
+	vTaskDelay(1000);
+
+	cJSON_Delete(root);
 }
 
