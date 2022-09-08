@@ -23,6 +23,30 @@
 #include "cJSON.h"
 #include "string.h"
 
+#include "weather.h"
+
+/* Littlevgl specific */
+#ifdef LV_LVGL_H_INCLUDE_SIMPLE
+#include "lvgl.h"
+#else
+#include "lvgl/lvgl.h"
+#endif
+#include "lvgl_helpers.h"
+
+#ifndef CONFIG_LV_TFT_DISPLAY_MONOCHROME
+    #if defined CONFIG_LV_USE_DEMO_WIDGETS
+        #include "lv_examples/src/lv_demo_widgets/lv_demo_widgets.h"
+    #elif defined CONFIG_LV_USE_DEMO_KEYPAD_AND_ENCODER
+        #include "lv_examples/src/lv_demo_keypad_encoder/lv_demo_keypad_encoder.h"
+    #elif defined CONFIG_LV_USE_DEMO_BENCHMARK
+        #include "lv_examples/src/lv_demo_benchmark/lv_demo_benchmark.h"
+    #elif defined CONFIG_LV_USE_DEMO_STRESS
+        #include "lv_examples/src/lv_demo_stress/lv_demo_stress.h"
+    #else
+        #error "No demo application selected."
+    #endif
+#endif
+
 
 static void weather_analysis_json(void *pJson);
 
@@ -30,7 +54,7 @@ static void weather_analysis_json(void *pJson);
 
 /* seniverse api arg */
 #define PRIVATE_KEY	"key=S9wcdovBWmKYunRle"
-#define CITY_NAME	"location=beijing"
+#define CITY_NAME	"location=huizhou"
 #define LANGUAGE	"language=zh-Hans"
 #define UNIT		"unit=c"
 
@@ -47,6 +71,24 @@ static const char *REQUEST = "GET " WEB_PATH " HTTP/1.0\r\n"
     "\r\n";
 
 static char recv_buf[1024];		/* 存储天气服务的json */
+
+LV_IMG_DECLARE(weather_cloudy);
+LV_IMG_DECLARE(weather_foggy);
+LV_IMG_DECLARE(weather_icerain);
+LV_IMG_DECLARE(weather_lightrain);
+LV_IMG_DECLARE(weather_moderatesnow);
+LV_IMG_DECLARE(weather_overcast);
+LV_IMG_DECLARE(weather_sleet);
+LV_IMG_DECLARE(weather_snow);
+LV_IMG_DECLARE(weather_storm);
+LV_IMG_DECLARE(weather_sunny);
+LV_IMG_DECLARE(weather_thunder);
+LV_IMG_DECLARE(weather_windy);
+LV_IMG_DECLARE(weather_unknow);
+
+
+static lv_obj_t * weather_image;
+static lv_obj_t * weather_label;
 
 struct weather_struct{
 	char private_key[128];			/* 平台私人密钥 */
@@ -76,6 +118,16 @@ void weather_task(void *pvParameters)
     	ESP_LOGE(TAG, "malloc error!");
     	vTaskDelete(NULL);
     }
+
+    weather_image = lv_img_create(lv_scr_act(), NULL);
+    lv_obj_set_pos(weather_image, 104, 16);
+    lv_img_set_auto_size(weather_image, true);
+    
+    weather_label = lv_label_create(lv_scr_act(), NULL);
+    //lv_label_set_long_mode(weather_label, LV_LABEL_LONG_SROLL_CIRC);
+    lv_obj_set_size(weather_label, 88, 48);
+    lv_obj_set_pos(weather_label, 152, 16);
+    lv_label_set_recolor(weather_label, true);
 
     while(1) {
         int err = getaddrinfo(WEB_SERVER, WEB_PORT, &hints, &res);
@@ -142,6 +194,7 @@ void weather_task(void *pvParameters)
         } while(r > 0);
 
 				weather_analysis_json(recv_buf);
+				weather_gui_refresh();
 				
         ESP_LOGI(TAG, "... done reading from socket. Last read return=%d errno=%d.", r, errno);
         close(s);
@@ -214,5 +267,117 @@ static void weather_analysis_json(void *pJson)
 
 	EXIT:
 	cJSON_Delete(root);
+}
+
+
+
+char *weather_get_city(void)
+{
+	return p_weather->city_network;
+}
+
+
+char *weather_get_text(void)
+{
+	return p_weather->text;
+}
+
+char *weather_get_code(void)
+{
+	return p_weather->code;
+}
+
+char *weather_get_temperature(void)
+{
+	return p_weather->temperature;
+}
+
+void weather_gui_refresh(void)
+{
+	if (strcmp(weather_get_code(), "0") == 0)  /* 晴（国内城市白天晴） */
+		lv_img_set_src(weather_image, &weather_sunny);
+	else if(strcmp(weather_get_code(), "1") == 0)  /* 晴（国内城市夜晚晴） */
+		lv_img_set_src(weather_image, &weather_sunny);
+	else if(strcmp(weather_get_code(), "2") == 0)  /* 晴（国外城市白天晴） */
+		lv_img_set_src(weather_image, &weather_sunny);
+	else if(strcmp(weather_get_code(), "3") == 0)  /* 晴（国外城市夜晚晴） */
+		lv_img_set_src(weather_image, &weather_sunny);
+	else if(strcmp(weather_get_code(), "4") == 0)  /* 多云*/
+		lv_img_set_src(weather_image, &weather_cloudy);
+	else if(strcmp(weather_get_code(), "5") == 0)  /* 晴间多云 */
+		lv_img_set_src(weather_image, &weather_cloudy);
+	else if(strcmp(weather_get_code(), "6") == 0)  /* 晴间多云*/
+		lv_img_set_src(weather_image, &weather_cloudy);
+	else if(strcmp(weather_get_code(), "7") == 0)  /* 大部多云 */
+		lv_img_set_src(weather_image, &weather_cloudy);
+	else if(strcmp(weather_get_code(), "8") == 0)  /* 大部多云 */
+		lv_img_set_src(weather_image, &weather_cloudy);
+	else if(strcmp(weather_get_code(), "9") == 0)  /* 阴 */
+		lv_img_set_src(weather_image, &weather_overcast);
+	else if(strcmp(weather_get_code(), "10") == 0)  /* 阵雨 */
+		lv_img_set_src(weather_image, &weather_lightrain);
+	else if(strcmp(weather_get_code(), "11") == 0)  /* 雷阵雨 */
+		lv_img_set_src(weather_image, &weather_thunder);
+	else if(strcmp(weather_get_code(), "12") == 0)  /* 雷阵雨伴有冰雹 */
+		lv_img_set_src(weather_image, &weather_thunder);
+	else if(strcmp(weather_get_code(), "13") == 0)  /* 小雨 */
+		lv_img_set_src(weather_image, &weather_lightrain);
+	else if(strcmp(weather_get_code(), "14") == 0)  /* 中雨 */
+		lv_img_set_src(weather_image, &weather_lightrain);
+	else if(strcmp(weather_get_code(), "15") == 0)  /* 大雨 */
+		lv_img_set_src(weather_image, &weather_storm);
+	else if(strcmp(weather_get_code(), "16") == 0)  /* 暴雨 */
+		lv_img_set_src(weather_image, &weather_storm);
+	else if(strcmp(weather_get_code(), "17") == 0)  /* 大暴雨 */
+		lv_img_set_src(weather_image, &weather_storm);
+	else if(strcmp(weather_get_code(), "18") == 0)  /* 特大暴雨 */
+		lv_img_set_src(weather_image, &weather_storm);
+	else if(strcmp(weather_get_code(), "19") == 0)  /* 冻雨 */
+		lv_img_set_src(weather_image, &weather_icerain);
+	else if(strcmp(weather_get_code(), "20") == 0)  /* 雨夹雪 */
+		lv_img_set_src(weather_image, &weather_sleet);
+	else if(strcmp(weather_get_code(), "21") == 0)  /* 阵雪 */
+		lv_img_set_src(weather_image, &weather_moderatesnow);
+	else if(strcmp(weather_get_code(), "22") == 0)  /* 小雪 */
+		lv_img_set_src(weather_image, &weather_moderatesnow);
+	else if(strcmp(weather_get_code(), "23") == 0)  /* 中雪 */
+		lv_img_set_src(weather_image, &weather_moderatesnow);
+	else if(strcmp(weather_get_code(), "24") == 0)  /* 大雪 */
+		lv_img_set_src(weather_image, &weather_snow);
+	else if(strcmp(weather_get_code(), "25") == 0)  /* 暴雪 */
+		lv_img_set_src(weather_image, &weather_snow);
+	else if(strcmp(weather_get_code(), "26") == 0)  /* 浮尘 */
+		lv_img_set_src(weather_image, &weather_foggy);
+	else if(strcmp(weather_get_code(), "27") == 0)  /* 扬沙 */
+		lv_img_set_src(weather_image, &weather_foggy);
+	else if(strcmp(weather_get_code(), "28") == 0)  /* 沙尘暴 */
+		lv_img_set_src(weather_image, &weather_windy);
+	else if(strcmp(weather_get_code(), "29") == 0)  /* 强沙尘暴 */
+		lv_img_set_src(weather_image, &weather_windy);
+	else if(strcmp(weather_get_code(), "30") == 0)  /* 雾 */
+		lv_img_set_src(weather_image, &weather_foggy);
+	else if(strcmp(weather_get_code(), "31") == 0)  /* 霾 */
+		lv_img_set_src(weather_image, &weather_foggy);
+	else if(strcmp(weather_get_code(), "32") == 0)  /* 风 */
+		lv_img_set_src(weather_image, &weather_windy);
+	else if(strcmp(weather_get_code(), "33") == 0)  /* 大风 */
+		lv_img_set_src(weather_image, &weather_windy);
+	else if(strcmp(weather_get_code(), "34") == 0)  /* 飓风 */
+		lv_img_set_src(weather_image, &weather_windy);
+	else if(strcmp(weather_get_code(), "35") == 0)  /* 热带风暴 */
+		lv_img_set_src(weather_image, &weather_windy);
+	else if(strcmp(weather_get_code(), "36") == 0)  /* 龙卷风 */
+		lv_img_set_src(weather_image, &weather_windy);
+	else if(strcmp(weather_get_code(), "37") == 0)  /* 冰 */
+		lv_img_set_src(weather_image, &weather_snow);
+	else if(strcmp(weather_get_code(), "38") == 0)  /* 热 */
+		lv_img_set_src(weather_image, &weather_sunny);
+	else if(strcmp(weather_get_code(), "99") == 0)  /* 未知 */
+		lv_img_set_src(weather_image, &weather_unknow);
+	else
+		lv_img_set_src(weather_image, &weather_unknow);
+
+  lv_label_set_text_fmt(weather_label, "#ff0000 %s#\n#0000ff %s %s°C#",
+  											weather_get_city(), weather_get_text(), weather_get_temperature());
 }
 

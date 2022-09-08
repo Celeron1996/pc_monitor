@@ -314,7 +314,7 @@ void pc_analysis_json(void *pJson)
 					"%s:[%d]\n"\
 					"%s:[%d]\n"\
 					"%s:[%d]\n"\
-					"---------------------------------------------------------\n",\					
+					"---------------------------------------------------------\n",
 					VAR_TO_STR(_pc_name_str),_pc_name_str, \
 					VAR_TO_STR(_mainboard_name_str),_mainboard_name_str, \
 					VAR_TO_STR(_cpu_name_str),_cpu_name_str, \

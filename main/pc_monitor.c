@@ -1268,7 +1268,7 @@ static void gui_task_main(void *pvParameters)
         cpu_load = pc_get_cpu_load();
         gpu_load = pc_get_gpu_load();
 
-        lv_label_set_text_fmt(label_chart, "#ff0000 处理器:%s# #00ff00 显卡:%s# #0000ff 内存:%s",
+        lv_label_set_text_fmt(label_chart, "#ff0000 处理器:%s# #00ff00 显卡:%s# #0000ff 内存:%s#",
 															pc_get_cpu_load_str(), pc_get_gpu_load_str(), pc_get_ram_load_str());
                              
         lv_chart_set_next(chart, chart_ser_cpu_load, cpu_load);
