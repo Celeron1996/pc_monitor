@@ -156,12 +156,9 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
     xHttpSemaphore = xSemaphoreCreateBinary();
-    if (xHttpSemaphore == NULL)
-    {
-        while (1);
-    }
+    s_wifi_event_group = xEventGroupCreate();   /*事件标记组，等待连接上wifi或失败的事件*/
 
-	button_init();
+		button_init();
 
     pc_init();
 
@@ -169,13 +166,20 @@ void app_main(void)
 
     vTaskDelay(pdMS_TO_TICKS(3000));
 
-    xTaskCreate(wifi_task, "wifi_task", 4*1024, (void*)NULL, 2, NULL);
+    xTaskCreate(wifi_task, "wifi_task", 4*1024, (void*)NULL, 1, NULL);
+    
+    xEventGroupWaitBits(s_wifi_event_group,
+            WIFI_CONNECTED_BIT,
+            pdFALSE,
+            pdFALSE,
+            portMAX_DELAY);
+    vEventGroupDelete(s_wifi_event_group);
 
-    xTaskCreate(http_task, "http_task", 4*1024, (void*)NULL, 3, NULL);
+    xTaskCreate(http_task, "http_task", 4*1024, (void*)NULL, 2, NULL);
 
-    xTaskCreate(weather_task, "weather_task", 4*1024, (void*)NULL, 1, NULL);
-
-    xTaskCreate(sntp_task, "sntp_task", 4*1024, (void*)NULL, 1, NULL);
+		xTaskCreate(weather_task, "weather_task", 4*1024, (void*)NULL, 3, NULL);
+		
+    xTaskCreate(sntp_task, "sntp_task", 4*1024, (void*)NULL, 4, NULL);
 
 }
 
@@ -540,8 +544,6 @@ void wifi_task(void *pvParameters)
     size_t length;
     nvs_handle_t nvs_handle;
 
-    s_wifi_event_group = xEventGroupCreate();   /*事件标记组，等待连接上wifi或失败的事件*/
-
     err = nvs_open("config", NVS_READWRITE, &nvs_handle);
     if(err != ESP_OK)
     {
@@ -570,13 +572,6 @@ void wifi_task(void *pvParameters)
         /*可能是没有建立此标签，第一次使用？重新配置一遍*/
         wifi_config();
     }
-
-    xEventGroupWaitBits(s_wifi_event_group,
-            WIFI_CONNECTED_BIT,
-            pdFALSE,
-            pdFALSE,
-            portMAX_DELAY);
-    vEventGroupDelete(s_wifi_event_group);
 
     vTaskDelete(NULL);
 }

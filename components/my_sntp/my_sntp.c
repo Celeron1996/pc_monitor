@@ -172,19 +172,6 @@ void sntp_task(void *pvParameters)
 	
 	my_sntp();
 
-	while (sntp_get_sync_status() != SNTP_SYNC_STATUS_COMPLETED)
-	{
-		vTaskDelay(pdMS_TO_TICKS(1000));
-		if (sntp_get_sync_mode() == SNTP_SYNC_MODE_IMMED)
-		{
-			ESP_LOGI(TAG, "waiting sync time...SNTP_SYNC_MODE_IMMED");
-		}
-		else
-		{
-			ESP_LOGI(TAG, "waiting sync time...SNTP_SYNC_MODE_SMOOTH");
-		}
-	}
-
 	lv_obj_t *label_time = lv_label_create(lv_scr_act(), NULL);
 	lv_label_set_long_mode(label_time, LV_LABEL_LONG_SROLL_CIRC);
 	lv_obj_set_pos(label_time, 104, 70);
@@ -195,7 +182,7 @@ void sntp_task(void *pvParameters)
 	  now = time(NULL);
 	  tm = localtime(&now);
     ESP_LOGI(TAG, "year:%d, month:%d, day:%d, week:%d, hour:%d, minute:%d, seconde:%d",
-    							tm->tm_year, tm->tm_mon, tm->tm_mday, tm->tm_wday, tm->tm_hour, tm->tm_min, tm->tm_sec);
+    							tm->tm_year+2000-100, tm->tm_mon+1, tm->tm_mday, tm->tm_wday, tm->tm_hour, tm->tm_min, tm->tm_sec);
 
     switch(tm->tm_wday)
     {
@@ -209,7 +196,7 @@ void sntp_task(void *pvParameters)
     	default: p_week = "?";break;
     }
 
-    lv_label_set_text_fmt(label_time, "%d-%d-%d %d:%d %s", tm->tm_year, tm->tm_mon, tm->tm_mday, tm->tm_hour, tm->tm_min, p_week);
+    lv_label_set_text_fmt(label_time, "%d-%d-%d %d:%d %s", tm->tm_year+2000-100, tm->tm_mon+1, tm->tm_mday, tm->tm_hour, tm->tm_min, p_week);
 
     vTaskDelay(pdMS_TO_TICKS(5000));    							
 	}

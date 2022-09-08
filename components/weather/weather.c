@@ -127,6 +127,8 @@ void weather_task(void *pvParameters)
     lv_obj_align(weather_label, weather_image, LV_ALIGN_IN_RIGHT_MID, 8, -8);
     lv_label_set_recolor(weather_label, true);
 
+    vTaskDelay(pdMS_TO_TICKS(5000));
+
     while(1) {
         int err = getaddrinfo(WEB_SERVER, WEB_PORT, &hints, &res);
 
