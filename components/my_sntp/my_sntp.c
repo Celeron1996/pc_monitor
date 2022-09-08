@@ -19,15 +19,32 @@
 #include "esp_sleep.h"
 #include "esp_sntp.h"
 
+/* Littlevgl specific */
+#ifdef LV_LVGL_H_INCLUDE_SIMPLE
+#include "lvgl.h"
+#else
+#include "lvgl/lvgl.h"
+#endif
+#include "lvgl_helpers.h"
+
+#ifndef CONFIG_LV_TFT_DISPLAY_MONOCHROME
+    #if defined CONFIG_LV_USE_DEMO_WIDGETS
+        #include "lv_examples/src/lv_demo_widgets/lv_demo_widgets.h"
+    #elif defined CONFIG_LV_USE_DEMO_KEYPAD_AND_ENCODER
+        #include "lv_examples/src/lv_demo_keypad_encoder/lv_demo_keypad_encoder.h"
+    #elif defined CONFIG_LV_USE_DEMO_BENCHMARK
+        #include "lv_examples/src/lv_demo_benchmark/lv_demo_benchmark.h"
+    #elif defined CONFIG_LV_USE_DEMO_STRESS
+        #include "lv_examples/src/lv_demo_stress/lv_demo_stress.h"
+    #else
+        #error "No demo application selected."
+    #endif
+#endif
+
+
 static const char *TAG = "my_sntp";
 
-#define CONFIG_SNTP_TIME_SYNC_METHOD_IMMED 1
-
-/* Variable holding number of times ESP32 restarted since first boot.
- * It is placed into RTC memory using RTC_DATA_ATTR and
- * maintains its value when ESP32 wakes from deep sleep.
- */
-RTC_DATA_ATTR static int boot_count = 0;
+#define SNTP_TIME_SYNC_METHOD_IMMED 1
 
 static void obtain_time(void);
 static void initialize_sntp(void);
@@ -145,3 +162,56 @@ static void initialize_sntp(void)
 #endif
     sntp_init();
 }
+
+
+static time_t now;
+static struct tm* tm;
+void sntp_task(void *pvParameters)
+{
+	char *p_week;
+	
+	my_sntp();
+
+	while (sntp_get_sync_status() != SNTP_SYNC_STATUS_COMPLETED)
+	{
+		vTaskDelay(pdMS_TO_TICKS(1000));
+		if (sntp_get_sync_mode() == SNTP_SYNC_MODE_IMMED)
+		{
+			ESP_LOGI(TAG, "waiting sync time...SNTP_SYNC_MODE_IMMED");
+		}
+		else
+		{
+			ESP_LOGI(TAG, "waiting sync time...SNTP_SYNC_MODE_SMOOTH");
+		}
+	}
+
+	lv_obj_t *label_time = lv_label_create(lv_scr_act(), NULL);
+	lv_label_set_long_mode(label_time, LV_LABEL_LONG_SROLL_CIRC);
+	lv_obj_set_pos(label_time, 104, 70);
+	lv_obj_set_width(label_time, 128);	
+
+	while (true)
+	{
+	  now = time(NULL);
+	  tm = localtime(&now);
+    ESP_LOGI(TAG, "year:%d, month:%d, day:%d, week:%d, hour:%d, minute:%d, seconde:%d",
+    							tm->tm_year, tm->tm_mon, tm->tm_mday, tm->tm_wday, tm->tm_hour, tm->tm_min, tm->tm_sec);
+
+    switch(tm->tm_wday)
+    {
+    	case 0:	p_week = "星期日";break;
+    	case 1:	p_week = "星期一";break;
+    	case 2:	p_week = "星期二";break;
+    	case 3:	p_week = "星期三";break;
+    	case 4:	p_week = "星期四";break;
+    	case 5:	p_week = "星期五";break;
+    	case 6:	p_week = "星期六";break;
+    	default: p_week = "?";break;
+    }
+
+    lv_label_set_text_fmt(label_time, "%d-%d-%d %d:%d %s", tm->tm_year, tm->tm_mon, tm->tm_mday, tm->tm_hour, tm->tm_min, p_week);
+
+    vTaskDelay(pdMS_TO_TICKS(5000));    							
+	}
+}
+

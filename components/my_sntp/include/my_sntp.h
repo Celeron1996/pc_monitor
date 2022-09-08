@@ -4,6 +4,6 @@
 
 
 void my_sntp(void);
-
+void sntp_task(void *pvParameters);
 
 #endif
