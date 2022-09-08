@@ -36,6 +36,8 @@
 
 #include "weather.h"
 
+#include "my_sntp.h"
+
 /* Littlevgl specific */
 #ifdef LV_LVGL_H_INCLUDE_SIMPLE
 #include "lvgl.h"
@@ -168,6 +170,8 @@ void app_main(void)
     xTaskCreate(http_task, "http_task", 4*1024, (void*)NULL, 3, NULL);
 
     xTaskCreate(weather_task, "weather_task", 4*1024, (void*)NULL, 1, NULL);
+
+    my_sntp();
 
 }
 
