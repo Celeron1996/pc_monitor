@@ -81,6 +81,7 @@ static void my_style(void);
 static void create_gui_task_loading(void);
 static void gui_task_main(void *pvParameters);
 static void update_ip_address_to_flash(int ip0, int ip1, int ip2, int ip3);
+static void reboot_task(void *pvParameters);
 
 
 /**
@@ -180,6 +181,8 @@ void app_main(void)
 		xTaskCreate(weather_task, "weather_task", 4*1024, (void*)NULL, 3, NULL);
 		
     xTaskCreate(sntp_task, "sntp_task", 4*1024, (void*)NULL, 4, NULL);
+
+    xTaskCreate(reboot_task, "reboot_task", 1*1024, (void*)NULL, 5, NULL);
 
 }
 
@@ -1283,3 +1286,21 @@ static void gui_task_main(void *pvParameters)
         counter_info++;
     }
 }
+
+
+static void reboot_task(void *pvParameters)
+{
+	int counter = 0;
+	
+	while (true)
+	{
+		vTaskDelay(pdMS_TO_TICKS(60000));	//1 minute
+		counter++;
+
+		if (counter >= 360)
+		{
+			esp_restart();
+		}
+	}
+}
+
