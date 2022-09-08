@@ -1220,11 +1220,11 @@ static void gui_task_main(void *pvParameters)
     lv_chart_series_t * chart_ser_ram_load = lv_chart_add_series(chart, LV_COLOR_BLUE);
 
     lv_obj_t *label_chart = lv_label_create(chart, NULL);
-    lv_label_set_long_mode(label_chart, LV_LABEL_LONG_SROLL_CIRC);
+    //lv_label_set_long_mode(label_chart, LV_LABEL_LONG_SROLL_CIRC);
     lv_obj_align(label_chart, NULL, LV_ALIGN_IN_TOP_LEFT, 0 ,0);
     lv_obj_set_width(label_chart, lv_obj_get_width(chart));
     lv_label_set_recolor(label_chart, true);
-    lv_label_set_text_fmt(label_chart, "#ff0000 处理器:%s# #00ff00 显卡:%s# #0000ff 内存:%s",
+    lv_label_set_text_fmt(label_chart, "#ff0000 处理器:%s#\n#00ff00 显卡:%s#\n#0000ff 内存:%s",
     											pc_get_cpu_load_str(), pc_get_gpu_load_str(), pc_get_ram_load_str());
 
 		/* 创建文本，显示pc详细信息 */
@@ -1271,8 +1271,8 @@ static void gui_task_main(void *pvParameters)
         cpu_load = pc_get_cpu_load();
         gpu_load = pc_get_gpu_load();
 
-        lv_label_set_text_fmt(label_chart, "#ff0000 处理器:%s# #00ff00 显卡:%s# #0000ff 内存:%s#",
-															pc_get_cpu_load_str(), pc_get_gpu_load_str(), pc_get_ram_load_str());
+        lv_label_set_text_fmt(label_chart, "#ff0000 处理器:%s#\n#00ff00 显卡:%s#\n#0000ff 内存:%s",
+    													pc_get_cpu_load_str(), pc_get_gpu_load_str(), pc_get_ram_load_str());
                              
         lv_chart_set_next(chart, chart_ser_cpu_load, cpu_load);
         lv_chart_set_next(chart, chart_ser_gpu_load, gpu_load);
