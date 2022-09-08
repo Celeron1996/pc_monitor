@@ -124,9 +124,7 @@ void weather_task(void *pvParameters)
     lv_img_set_auto_size(weather_image, true);
     
     weather_label = lv_label_create(lv_scr_act(), NULL);
-    //lv_label_set_long_mode(weather_label, LV_LABEL_LONG_SROLL_CIRC);
-    lv_obj_set_size(weather_label, 88, 48);
-    lv_obj_set_pos(weather_label, 152, 16);
+    lv_obj_align(weather_label, weather_image, LV_ALIGN_IN_RIGHT_MID, 8, -8);
     lv_label_set_recolor(weather_label, true);
 
     while(1) {
@@ -195,13 +193,13 @@ void weather_task(void *pvParameters)
 
 				weather_analysis_json(recv_buf);
 				weather_gui_refresh();
+				ESP_LOGI(TAG, "-----------------------------------------------------------");
+				ESP_LOGI(TAG, "city:%s, text:%s, temper:%s", weather_get_city(), weather_get_text(), weather_get_temperature());
+				ESP_LOGI(TAG, "-----------------------------------------------------------");
 				
         ESP_LOGI(TAG, "... done reading from socket. Last read return=%d errno=%d.", r, errno);
         close(s);
-        for(int countdown = 10; countdown >= 0; countdown--) {
-            ESP_LOGI(TAG, "%d... ", countdown);
-            vTaskDelay(1000 / portTICK_PERIOD_MS);
-        }
+        vTaskDelay(pdMS_TO_TICKS(900000));
         ESP_LOGI(TAG, "Starting again!");
     }
 }
