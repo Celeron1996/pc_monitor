@@ -179,7 +179,7 @@ void app_main(void)
             portMAX_DELAY);
     vEventGroupDelete(s_wifi_event_group);
 
-		xTaskCreate(watchdog_task, "watchdog_task", 1*1024, (void*)NULL, 0, NULL);
+		//xTaskCreate(watchdog_task, "watchdog_task", 1*1024, (void*)NULL, 0, NULL);
 		
     xTaskCreate(http_task, "http_task", 4*1024, (void*)NULL, 0, NULL);
 
@@ -187,7 +187,7 @@ void app_main(void)
 		
     xTaskCreate(sntp_task, "sntp_task", 4*1024, (void*)NULL, 0, NULL);
 
-    xTaskCreate(reboot_task, "reboot_task", 1*1024, (void*)NULL, 0, NULL);
+    //xTaskCreate(reboot_task, "reboot_task", 1*1024, (void*)NULL, 0, NULL);
 
 }
 
@@ -1306,6 +1306,7 @@ static void reboot_task(void *pvParameters)
 
 		if (counter >= 21600)
 		{
+			ESP_LOGI(TAG, "reboot_task esp restart");
 			esp_restart();
 		}
 	}

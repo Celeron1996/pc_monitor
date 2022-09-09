@@ -11,7 +11,11 @@
 
 #include "esp_system.h"
 
+#include "esp_log.h"
+
 #include "watchdog.h"
+
+static const char *TAG = "watchdog";
 
 
 static void vTimerCallback( TimerHandle_t xTimer );
@@ -37,6 +41,7 @@ void watchdog_task(void *pvParameter)
 
 static void vTimerCallback( TimerHandle_t xTimer )
 {
+	ESP_LOGI(TAG, "watchdog task esp restart");
 	esp_restart();
 }
 
