@@ -43,7 +43,7 @@
 
 #include "watchdog.h"
 
-
+#include "daily_word.h"
 
 /* Littlevgl specific */
 #ifdef LV_LVGL_H_INCLUDE_SIMPLE
@@ -189,6 +189,8 @@ void app_main(void)
 
     //xTaskCreate(reboot_task, "reboot_task", 1*1024, (void*)NULL, 0, NULL);
 
+		//xTaskCreate(daily_word_task, "daily_word_task", 4*1024, (void*)NULL, 0, NULL);
+		
 }
 
 
