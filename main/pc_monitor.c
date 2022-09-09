@@ -53,20 +53,6 @@
 #endif
 #include "lvgl_helpers.h"
 
-#ifndef CONFIG_LV_TFT_DISPLAY_MONOCHROME
-    #if defined CONFIG_LV_USE_DEMO_WIDGETS
-        #include "lv_examples/src/lv_demo_widgets/lv_demo_widgets.h"
-    #elif defined CONFIG_LV_USE_DEMO_KEYPAD_AND_ENCODER
-        #include "lv_examples/src/lv_demo_keypad_encoder/lv_demo_keypad_encoder.h"
-    #elif defined CONFIG_LV_USE_DEMO_BENCHMARK
-        #include "lv_examples/src/lv_demo_benchmark/lv_demo_benchmark.h"
-    #elif defined CONFIG_LV_USE_DEMO_STRESS
-        #include "lv_examples/src/lv_demo_stress/lv_demo_stress.h"
-    #else
-        #error "No demo application selected."
-    #endif
-#endif
-
 
 /*---------------------------- LVGL about (begin) ----------------------------*/
 /**********************
@@ -79,9 +65,6 @@
  **********************/
 static void lv_tick_task(void *arg);
 static void guiTask(void *pvParameter);
-static void create_demo_application(void);
-static void my_style(void);
-static void create_gui_task_loading(void);
 static void reboot_task(void *pvParameters);
 
 
@@ -126,12 +109,8 @@ const char *NVS_TRUE_STR = "true";
 const char *NVS_FALSE_STR = "false";
 const char *NVS_JSON_STR = "json";
 
-
 static const char *TAG = "pc_monitor";
 
-/*-------------------------------- my custom -------------------------------------*/
-#define MY_COLOR_SKYBLUE    LV_COLOR_MAKE(135, 206, 235)
-#define MY_COLOR_BACKBLACK    LV_COLOR_MAKE(233, 233, 233)
 
 /**
  * @brief 应用主函数
@@ -152,8 +131,6 @@ void app_main(void)
     s_wifi_event_group = xEventGroupCreate();   /*事件标记组，等待连接上wifi或失败的事件*/
 
 		button_init();
-
-    pc_init();
 
     xTaskCreate(guiTask, "guiTask", 4*1024, (void*)NULL, 0, NULL);
 
@@ -187,7 +164,6 @@ void app_main(void)
  * @brief lgvl线程
  * 
  */
-void my_demo(void);
 static void guiTask(void *pvParameter) {
 
     (void) pvParameter;
@@ -265,11 +241,7 @@ static void guiTask(void *pvParameter) {
     ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, LV_TICK_PERIOD_MS * 1000));
 
     /* Create the demo application */
-    //create_demo_application();
-    my_demo();
-    /*--------------my lvgl style init--------------*/
-    my_style();
-    /*----------------------------------------------*/
+    //...
 
     while (1) {
         /* Delay 1 tick (assumes FreeRTOS tick is 10ms */
@@ -290,43 +262,6 @@ static void guiTask(void *pvParameter) {
     vTaskDelete(NULL);
 }
 
-static void create_demo_application(void)
-{
-    /* When using a monochrome display we only show "Hello World" centered on the
-     * screen */
-#if defined CONFIG_LV_TFT_DISPLAY_MONOCHROME || \
-    defined CONFIG_LV_TFT_DISPLAY_CONTROLLER_ST7735S
-
-    /* use a pretty small demo for monochrome displays */
-    /* Get the current screen  */
-    lv_obj_t * scr = lv_disp_get_scr_act(NULL);
-
-    /*Create a Label on the currently active screen*/
-    lv_obj_t * label1 =  lv_label_create(scr, NULL);
-
-    /*Modify the Label's text*/
-    lv_label_set_text(label1, "Hello\nworld");
-
-    /* Align the Label to the center
-     * NULL means align on parent (which is the screen now)
-     * 0, 0 at the end means an x, y offset after alignment*/
-    lv_obj_align(label1, NULL, LV_ALIGN_CENTER, 0, 0);
-#else
-    /* Otherwise we show the selected demo */
-
-    #if defined CONFIG_LV_USE_DEMO_WIDGETS
-        lv_demo_widgets();
-    #elif defined CONFIG_LV_USE_DEMO_KEYPAD_AND_ENCODER
-        lv_demo_keypad_encoder();
-    #elif defined CONFIG_LV_USE_DEMO_BENCHMARK
-        lv_demo_benchmark();
-    #elif defined CONFIG_LV_USE_DEMO_STRESS
-        lv_demo_stress();
-    #else
-        #error "No demo application selected."
-    #endif
-#endif
-}
 
 /**
  * @brief lvgl心跳计数函数，告诉lvgl经过了1ms
@@ -337,9 +272,6 @@ static void lv_tick_task(void *arg) {
 
     lv_tick_inc(LV_TICK_PERIOD_MS);
 }
-
-
-
 
 
 /**
@@ -540,8 +472,6 @@ void wifi_init_sta(void)
     cJSON *json_root = cJSON_Parse(buffer);
     cJSON *json_wifi_ssid = cJSON_GetObjectItem(json_root, "wifi_ssid");
     cJSON *json_wifi_pass = cJSON_GetObjectItem(json_root, "wifi_pass");
-    cJSON *json_ip_address = cJSON_GetObjectItem(json_root, "ip_address");
-    cJSON *json_port = cJSON_GetObjectItem(json_root, "port");
 
     ESP_LOGI(TAG, "json data:%s", cJSON_Print(json_root));
 
@@ -765,198 +695,6 @@ void wifi_reset(void)
 
     nvs_close(nvs_handle);
 }
-
-
-
-
-
-
-
-
-/********************************my demo******************************************************/
-lv_obj_t * lmeter;
-lv_obj_t * label1;
-
-static void my_demo_task(void *pvParameters)
-{
-    int32_t value = 0;
-    bool is_add = true;
-
-    while (true)
-    {
-        lv_linemeter_set_value(lmeter, value);
-        vTaskDelay(pdMS_TO_TICKS(20));
-
-        if (value > 100)
-        {
-            is_add = false;
-        }
-        else if (value < 0)
-        {
-            is_add = true;
-        }
-        if (is_add)
-        {
-            value++;
-        }
-        else
-        {
-            value--;
-        }
-    }
-}
-
-void linemeter_demo(void)
-{
-    /*Create a line meter */
-    
-    lmeter = lv_linemeter_create(lv_scr_act(), NULL);
-    lv_linemeter_set_range(lmeter, 0, 100);                   /*Set the range*/
-    lv_linemeter_set_value(lmeter, 80);                       /*Set the current value*/
-    lv_linemeter_set_scale(lmeter, 240, 30);                  /*Set the angle and number of lines*/
-    lv_obj_set_size(lmeter, 240, 240);
-    lv_obj_align(lmeter, NULL, LV_ALIGN_CENTER, 0, 0);
-
-    label1 = lv_label_create(lmeter, NULL);
-    lv_label_set_text(label1, "Hello World");
-    lv_obj_align(label1, NULL, LV_ALIGN_CENTER, 0, 0);
-
-    xTaskCreate(my_demo_task, "my_demo_task", 1024*10, (void*)NULL, 0, NULL);
-}
-
-void image_demo(void)
-{
-    LV_IMG_DECLARE(girl);
-    lv_obj_t * img1 = lv_img_create(lv_scr_act(), NULL);
-    lv_img_set_src(img1, &girl);
-    lv_obj_align(img1, NULL, LV_ALIGN_CENTER, 0, 0);
-    lv_img_set_auto_size(img1, true);
-}
-
-
-/**
- * Add a faded area effect to the line chart
- */
-void lv_ex_chart_2(void)
-{
-    /*Create a chart*/
-    lv_obj_t * chart;
-    chart = lv_chart_create(lv_scr_act(), NULL);
-    lv_obj_set_size(chart, 240, 120);
-    lv_obj_align(chart, NULL, LV_ALIGN_IN_BOTTOM_LEFT, 0, 0);
-    lv_chart_set_type(chart, LV_CHART_TYPE_LINE);   /*Show lines and points too*/
-
-    /*Add a faded are effect*/
-    lv_obj_set_style_local_bg_opa(chart, LV_CHART_PART_SERIES, LV_STATE_DEFAULT, LV_OPA_50); /*Max. opa.*/
-    lv_obj_set_style_local_bg_grad_dir(chart, LV_CHART_PART_SERIES, LV_STATE_DEFAULT, LV_GRAD_DIR_VER);
-    lv_obj_set_style_local_bg_main_stop(chart, LV_CHART_PART_SERIES, LV_STATE_DEFAULT, 255);    /*Max opa on the top*/
-    lv_obj_set_style_local_bg_grad_stop(chart, LV_CHART_PART_SERIES, LV_STATE_DEFAULT, 0);      /*Transparent on the bottom*/
-
-
-    /*Add two data series*/
-    lv_chart_series_t * ser1 = lv_chart_add_series(chart, LV_COLOR_RED);
-    lv_chart_series_t * ser2 = lv_chart_add_series(chart, LV_COLOR_GREEN);
-
-    /*Set the next points on 'ser1'*/
-    lv_chart_set_next(chart, ser1, 31);
-    lv_chart_set_next(chart, ser1, 66);
-    lv_chart_set_next(chart, ser1, 10);
-    lv_chart_set_next(chart, ser1, 89);
-    lv_chart_set_next(chart, ser1, 63);
-    lv_chart_set_next(chart, ser1, 56);
-    lv_chart_set_next(chart, ser1, 32);
-    lv_chart_set_next(chart, ser1, 35);
-    lv_chart_set_next(chart, ser1, 57);
-    lv_chart_set_next(chart, ser1, 85);
-
-    /*Directly set points on 'ser2'*/
-    ser2->points[0] = 92;
-    ser2->points[1] = 71;
-    ser2->points[2] = 61;
-    ser2->points[3] = 15;
-    ser2->points[4] = 21;
-    ser2->points[5] = 35;
-    ser2->points[6] = 35;
-    ser2->points[7] = 58;
-    ser2->points[8] = 31;
-    ser2->points[9] = 53;
-
-    lv_obj_t *label = lv_label_create(chart, NULL);
-    lv_label_set_text(label, "cpu");
-    lv_obj_align(label, NULL, LV_ALIGN_IN_TOP_RIGHT, 0 ,0);
-
-    lv_chart_refresh(chart); /*Required after direct set*/
-}
-void my_demo(void)
-{
-    //linemeter_demo();
-    //image_demo();
-    //create_gui_task_loading();
-
-    //gui_task_main(NULL);
-
-    //lv_ex_chart_2();
-}
-
-/**
- * @brief 设置主屏幕样式
- * 
- */
-static void my_style(void)
-{
-    
-    lv_obj_t *obj = lv_scr_act();
-
-    // lv_style_init(&style_main);
-
-    // lv_style_set_bg_color(&style_main, LV_STATE_DEFAULT, LV_COLOR_BLACK);
-    // lv_style_set_value_color(&style_main, LV_STATE_DEFAULT, LV_COLOR_BLACK);
-    // lv_style_set_text_color(&style_main, LV_STATE_DEFAULT, LV_COLOR_WHITE);
-    // lv_style_set_line_color(&style_main, LV_STATE_DEFAULT, LV_COLOR_BLACK);
-
-    // lv_obj_add_style(obj, LV_OBJ_PART_MAIN, &style_main);
-}
-
-
-/**
- * @brief 连接wifi->连接http server，这两个步骤，用gui显示出来
- *          用信号量来判断进度
- * 
- */
-static void create_gui_task_loading(void)
-{
-     lv_style_t style_spinner;
-     lv_style_init(&style_spinner);
-
-    lv_style_set_line_width(&style_spinner, LV_STATE_DEFAULT, 10);
-    lv_style_set_border_width(&style_spinner, LV_STATE_DEFAULT, 10);
-
-    /*Create a spinner*/
-    lv_obj_t * spinner = lv_spinner_create(lv_scr_act(), NULL);
-    lv_obj_t *label = lv_label_create(lv_scr_act(), NULL);
-
-    //lv_obj_add_style(spinner, LV_OBJ_PART_ALL, &style_spinner);
-
-    lv_obj_set_size(spinner, 100, 100);
-    lv_obj_align(spinner, NULL, LV_ALIGN_CENTER, 0, 0);
-    lv_spinner_set_type(spinner, LV_SPINNER_TYPE_FILLSPIN_ARC);
-
-
-    lv_obj_align(label, NULL, LV_ALIGN_IN_BOTTOM_MID, -50, 0);
-    lv_label_set_text(label, "connecting wifi...");
-
-
-}
-
-/**
- * @brief 创建主gui图标，用于显示温度
- * 
- */
-static void create_gui_task_main(void)
-{
-
-}
-
 
 static void reboot_task(void *pvParameters)
 {
