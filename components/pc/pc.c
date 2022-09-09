@@ -551,6 +551,7 @@ void pc_task(void *pvParameters)
 		esp_http_client_config_t config = {
 				.url = URL,
 		};
+		int pc_info_counter = 9999;
 
 		while (pc_refresh_url() <= 0)
 		{
@@ -671,12 +672,14 @@ void pc_task(void *pvParameters)
 						  lv_linemeter_set_value(lmeter_cpu, cpu_temper);
 						  
 						  lv_label_set_text_fmt(label_cpu_temper, "%s", pc_get_cpu_temperature_str());
-						  
 						  lv_obj_align(label_cpu_temper, NULL, LV_ALIGN_CENTER, 0, 0);    			
 
-
-						  lv_label_set_text_fmt(label_pc_info, "电脑:%s #0000ff 主板:%s ##ff0000 处理器:%s ##00ff00 显卡:%s #",
-																		pc_get_name_str(), pc_get_mainboard_name_str(), pc_get_cpu_name_str(), pc_get_gpu_name_str());       			
+							if (pc_info_counter > 10)
+							{
+								pc_info_counter = 0;
+						  	lv_label_set_text_fmt(label_pc_info, "电脑:%s #0000ff 主板:%s ##ff0000 处理器:%s ##00ff00 显卡:%s #",
+																			pc_get_name_str(), pc_get_mainboard_name_str(), pc_get_cpu_name_str(), pc_get_gpu_name_str());       			
+							}															
 
 
 							lv_label_set_text_fmt(label_chart, "#ff0000 处理器:%s#\n#00ff00 显卡:%s#\n#0000ff 内存:%s",
@@ -731,6 +734,7 @@ void pc_task(void *pvParameters)
 			esp_http_client_cleanup(client);
 
 			vTaskDelay(pdMS_TO_TICKS((is_scan_mode == true)?(100):(1000)));
+			pc_info_counter++;
 
 			if (is_scan_mode == true)
 			{
