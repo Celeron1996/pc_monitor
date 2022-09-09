@@ -181,11 +181,13 @@ void app_main(void)
 
 		//xTaskCreate(watchdog_task, "watchdog_task", 1*1024, (void*)NULL, 0, NULL);
 		
-    xTaskCreate(http_task, "http_task", 4*1024, (void*)NULL, 0, NULL);
+    xTaskCreate(http_task, "http_task", 4*1024, (void*)NULL, 1, NULL);
 
-		xTaskCreate(weather_task, "weather_task", 4*1024, (void*)NULL, 0, NULL);
+    xTaskCreate(gui_task_main, "gui_task_main", 4*1024, (void*)NULL, 2, NULL);
+
+		xTaskCreate(weather_task, "weather_task", 4*1024, (void*)NULL, 3, NULL);
 		
-    xTaskCreate(sntp_task, "sntp_task", 4*1024, (void*)NULL, 0, NULL);
+    xTaskCreate(sntp_task, "sntp_task", 4*1024, (void*)NULL, 4, NULL);
 
     //xTaskCreate(reboot_task, "reboot_task", 1*1024, (void*)NULL, 0, NULL);
 
@@ -438,8 +440,6 @@ static void http_task(void *pvParameters)
     }
     vSemaphoreDelete(xHttpSemaphore);
 
-    xTaskCreate(gui_task_main, "gui_task_main", 4*1024, (void*)NULL, 1, NULL);
-
     esp_http_client_config_t config = {
         .url = URL,
     };
@@ -470,7 +470,7 @@ static void http_task(void *pvParameters)
 					}
 					else
 					{
-						memset(buffer, 0, content_length);
+						memset(buffer, 0, (content_length + 128));
 						int read_len, status_code_, content_length_;
 						
             read_len = esp_http_client_read(client, buffer, content_length);
@@ -481,6 +481,8 @@ static void http_task(void *pvParameters)
             }
             else
             {
+            	ESP_LOGI(TAG, "%s", buffer);
+            	vTaskDelay(1000);
             	pc_analysis_json(buffer);
             }
 		        

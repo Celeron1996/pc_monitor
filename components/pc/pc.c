@@ -81,7 +81,7 @@ void pc_init(void)
  * @brief 解析json数据，得到基本数据
  * 
  */
-#define PC_CJSON_CHECK(value)	do{if(value == NULL){goto EXIT;}}while(0)
+#define PC_CJSON_CHECK(value)	do{if(value == NULL){ESP_LOGE(TAG, "%s,%d,%s", __FILE__, __LINE__, __FUNCTION__);goto EXIT;}}while(0)
 void pc_analysis_json(void *pJson)
 {
     taskENTER_CRITICAL(0);
