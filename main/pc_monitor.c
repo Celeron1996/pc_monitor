@@ -538,12 +538,7 @@ void wifi_init_sta(void)
 
     /* Waiting until either the connection is established (WIFI_CONNECTED_BIT) or connection failed for the maximum
      * number of re-tries (WIFI_FAIL_BIT). The bits are set by event_handler() (see above) */
-    //wifi_waiting_connect((const char *)wifi_config.sta.ssid);
-	  xEventGroupWaitBits(task_event_group,
-	          WIFI_CONNECTED_BIT,
-	          pdFALSE,
-	          pdTRUE,
-	          portMAX_DELAY);    
+    wifi_waiting_connect((const char *)wifi_config.sta.ssid);
     EventBits_t bits = xEventGroupGetBits(task_event_group);
 
     /* xEventGroupWaitBits() returns the bits before the call returned, hence we can test which event actually
@@ -764,7 +759,7 @@ static void wifi_waiting_connect(const char *wifi_ssid)
 	         
 	vTaskDelay(pdMS_TO_TICKS(200));
 
-	lv_label_set_text_fmt(label, "连接至wifi:\n<%s>...", wifi_ssid);
+	lv_label_set_text_fmt(label, "正在连接至wifi:\n<%s>...", wifi_ssid);
 	lv_bar_set_value(bar1, 50, LV_ANIM_OFF); 
   xEventGroupWaitBits(task_event_group,
           WIFI_CONNECTED_BIT,
@@ -779,6 +774,6 @@ static void wifi_waiting_connect(const char *wifi_ssid)
 
   vTaskDelay(pdMS_TO_TICKS(2000));
 
-  //lv_obj_del(label);
-  //lv_obj_del(bar1);
+  lv_obj_del(label);
+  lv_obj_del(bar1);
 }
