@@ -41,6 +41,9 @@
 #include <time.h>
 #include <sys/time.h>
 
+#include "watchdog.h"
+
+
 
 /* Littlevgl specific */
 #ifdef LV_LVGL_H_INCLUDE_SIMPLE
@@ -167,7 +170,7 @@ void app_main(void)
 
     vTaskDelay(pdMS_TO_TICKS(3000));
 
-    xTaskCreate(wifi_task, "wifi_task", 4*1024, (void*)NULL, 1, NULL);
+    xTaskCreate(wifi_task, "wifi_task", 4*1024, (void*)NULL, 0, NULL);
     
     xEventGroupWaitBits(s_wifi_event_group,
             WIFI_CONNECTED_BIT,
@@ -176,13 +179,15 @@ void app_main(void)
             portMAX_DELAY);
     vEventGroupDelete(s_wifi_event_group);
 
-    xTaskCreate(http_task, "http_task", 4*1024, (void*)NULL, 2, NULL);
-
-		xTaskCreate(weather_task, "weather_task", 4*1024, (void*)NULL, 3, NULL);
+		xTaskCreate(watchdog_task, "watchdog_task", 1*1024, (void*)NULL, 0, NULL);
 		
-    xTaskCreate(sntp_task, "sntp_task", 4*1024, (void*)NULL, 4, NULL);
+    xTaskCreate(http_task, "http_task", 4*1024, (void*)NULL, 0, NULL);
 
-    xTaskCreate(reboot_task, "reboot_task", 1*1024, (void*)NULL, 5, NULL);
+		xTaskCreate(weather_task, "weather_task", 4*1024, (void*)NULL, 0, NULL);
+		
+    xTaskCreate(sntp_task, "sntp_task", 4*1024, (void*)NULL, 0, NULL);
+
+    xTaskCreate(reboot_task, "reboot_task", 1*1024, (void*)NULL, 0, NULL);
 
 }
 
@@ -1294,10 +1299,12 @@ static void reboot_task(void *pvParameters)
 	
 	while (true)
 	{
-		vTaskDelay(pdMS_TO_TICKS(60000));	//1 minute
+		watchdog_reset();
+		
+		vTaskDelay(pdMS_TO_TICKS(1000));
 		counter++;
 
-		if (counter >= 360)
+		if (counter >= 21600)
 		{
 			esp_restart();
 		}
