@@ -481,8 +481,6 @@ static void http_task(void *pvParameters)
             }
             else
             {
-            	ESP_LOGI(TAG, "%s", buffer);
-            	vTaskDelay(1000);
             	pc_analysis_json(buffer);
             }
 		        
@@ -527,7 +525,7 @@ static void http_task(void *pvParameters)
     	}
 
     	esp_http_client_cleanup(client);
-    	vTaskDelay(pdMS_TO_TICKS((is_scan_mode == true)?(100):(3000)));
+    	vTaskDelay(pdMS_TO_TICKS((is_scan_mode == true)?(100):(1000)));
 
     	if (is_scan_mode == true)
     	{
@@ -1218,7 +1216,8 @@ static void gui_task_main(void *pvParameters)
     lv_obj_set_size(chart, 240, 120);
     lv_obj_align(chart, NULL, LV_ALIGN_IN_BOTTOM_LEFT, 0, 0);
     lv_chart_set_type(chart, LV_CHART_TYPE_LINE);   /*Show lines and points too*/
-    lv_chart_set_div_line_count(chart, 4, 8);
+    lv_chart_set_div_line_count(chart, 3, 5);
+    lv_chart_set_point_count(chart, 6);
 
     /*Add a faded are effect*/
     lv_obj_set_style_local_bg_opa(chart, LV_CHART_PART_SERIES, LV_STATE_DEFAULT, LV_OPA_50); /*Max. opa.*/
@@ -1252,7 +1251,7 @@ static void gui_task_main(void *pvParameters)
 		counter_lmeter = 10000;
     while (true)
     {
-    		if (counter_lmeter > 3)
+    		if (counter_lmeter > 1)
     		{
     			counter_lmeter = 0;
 						/* get data */
