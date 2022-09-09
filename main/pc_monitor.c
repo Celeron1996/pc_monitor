@@ -82,8 +82,6 @@ static void guiTask(void *pvParameter);
 static void create_demo_application(void);
 static void my_style(void);
 static void create_gui_task_loading(void);
-static void gui_task_main(void *pvParameters);
-static void update_ip_address_to_flash(int ip0, int ip1, int ip2, int ip3);
 static void reboot_task(void *pvParameters);
 
 
@@ -94,15 +92,7 @@ static void reboot_task(void *pvParameters);
 SemaphoreHandle_t xGuiSemaphore;
 /*---------------------------- LVGL about (end) -----------------------------*/
 
-/*--------------------------- http client (begin) -----------------------------*/
-#define MAX_HTTP_RECV_BUFFER_ (10*1024) /*用于存储PC httpServer接收到的json字符串的缓存的大小*/
-static void http_task(void *pvParameters);  /*http任务，从PC http Server中读取信息json*/
 
-/**
- * @brief 当连接上wifi之后，通过这个信号量通知http task，http task中得到信号量后再建立http client服务
- */
-SemaphoreHandle_t xHttpSemaphore = NULL;
-/*---------------------------- http client (end) ------------------------------*/
 
 /*--------------------------- wifi (begin) ------------------------------------*/
 #define ESP_AP_WIFI_SSID      "PCMonitor"   /*wifi ssid*/
@@ -130,13 +120,13 @@ static void event_handler(void* arg, esp_event_base_t event_base, int32_t event_
 /*---------------------------------- wifi (end) ----------------------------*/
 
 /*存储非易失性存储的字符串*/
-static const char *NVS_NAME_STR = "config";
-static const char *NVS_ACTIVE_STR = "active";
-static const char *NVS_TRUE_STR = "true";
-static const char *NVS_FALSE_STR = "false";
-static const char *NVS_JSON_STR = "json";
+const char *NVS_NAME_STR = "config";
+const char *NVS_ACTIVE_STR = "active";
+const char *NVS_TRUE_STR = "true";
+const char *NVS_FALSE_STR = "false";
+const char *NVS_JSON_STR = "json";
 
-static char URL[64] = {0};  /*统一资源定位链接，当PC端生成了http server时，通过此url获取json字符串*/
+
 static const char *TAG = "pc_monitor";
 
 /*-------------------------------- my custom -------------------------------------*/
@@ -159,7 +149,6 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
-    xHttpSemaphore = xSemaphoreCreateBinary();
     s_wifi_event_group = xEventGroupCreate();   /*事件标记组，等待连接上wifi或失败的事件*/
 
 		button_init();
@@ -181,9 +170,7 @@ void app_main(void)
 
 		//xTaskCreate(watchdog_task, "watchdog_task", 1*1024, (void*)NULL, 0, NULL);
 		
-    xTaskCreate(http_task, "http_task", 4*1024, (void*)NULL, 1, NULL);
-
-    xTaskCreate(gui_task_main, "gui_task_main", 4*1024, (void*)NULL, 2, NULL);
+    xTaskCreate(pc_task, "pc_task", 6*1024, (void*)NULL, 1, NULL);
 
 		xTaskCreate(weather_task, "weather_task", 4*1024, (void*)NULL, 3, NULL);
 		
@@ -352,195 +339,7 @@ static void lv_tick_task(void *arg) {
 }
 
 
-/**
- * @brief 线程：将最新连接成功的ip地址写入flash
- * 
- */
-static void update_ip_address_to_flash(int ip0, int ip1, int ip2, int ip3)
-{
-		/*--------------------step1:首先，从nvs中获取wifi名称、密码，ip地址等--------------*/
-		esp_err_t err;
-		char buffer[128];
-		size_t length;
-		nvs_handle_t nvs_handle;
-		char ip_str[] = "255.255.255.255";
 
-		/*打开nvs*/
-		err = nvs_open(NVS_NAME_STR, NVS_READWRITE, &nvs_handle);
-		if(err != ESP_OK)
-		{
-				ESP_LOGE(TAG, "nvs_open error, code = %d", err);
-				while(1);
-		}
-
-		/*获取json*/
-		length = sizeof(buffer);
-		memset(buffer, 0, sizeof(buffer));
-		err = nvs_get_str(nvs_handle, NVS_JSON_STR, buffer, &length);
-		if(err == ESP_OK)
-		{
-				ESP_LOGI(TAG, "get nvs wifi json success! json = %s", buffer);
-		}
-		else
-		{
-				ESP_LOGE(TAG, "nvs active error, code = %d", err);
-				goto flag_err;
-		}
-
-		/*------------------------step2:获取成功，解析json----------------------------------*/
-		cJSON *json_root = cJSON_Parse(buffer);
-
-		memset(ip_str, 0, sizeof(ip_str));
-		sprintf(ip_str,"%d.%d.%d.%d",ip0,ip1,ip2,ip3);
-		cJSON_SetValuestring(cJSON_GetObjectItem(json_root, "ip_address"), (const char *)ip_str);
-
-		err = nvs_set_str(nvs_handle, NVS_JSON_STR, cJSON_PrintUnformatted(json_root));
-		if (err == ESP_OK)
-		{
-			ESP_LOGI(TAG, "update json to flash success! json = %s", cJSON_PrintUnformatted(json_root));
-		}
-		else
-		{
-			ESP_LOGE(TAG, "update json to flash error, code = %d", err);
-			goto flag_err;
-		}
-
-		nvs_close(nvs_handle);
-
-		cJSON_Delete(json_root);
-
-		return;
-		
-		flag_err:
-		nvs_set_str(nvs_handle, NVS_ACTIVE_STR, NVS_FALSE_STR);
-		nvs_commit(nvs_handle);
-		nvs_close(nvs_handle);
-		ESP_LOGE(TAG, "update_ip_address_to_flash error");
-}
-
-
-
-/**
- * @brief 线程：获取pc的json
- * 
- */
-static void http_task(void *pvParameters)
-{
-    BaseType_t error = pdFALSE;
-    char *buffer = NULL;
-    esp_err_t err;
-    uint8_t openerr_count = 0;
-    int ip0,ip1,ip2,ip3,port;
-    bool is_scan_mode = false;
-
-    error = xSemaphoreTake(xHttpSemaphore, portMAX_DELAY);  /*当连接上wifi之后，会得到信号量*/
-    if (error != pdTRUE)
-    {
-        while (true);
-    }
-    vSemaphoreDelete(xHttpSemaphore);
-
-    esp_http_client_config_t config = {
-        .url = URL,
-    };
-    ESP_LOGI(TAG, "url:%s", config.url);
-    esp_http_client_handle_t client;
-
-    while (true)
-    {
-    	client = esp_http_client_init(&config);
-    	if (client != NULL)
-    	{
-    		if (is_scan_mode == true)
-    		{
-    			esp_http_client_set_timeout_ms(client, 400);
-    		}
-    		else
-    		{
-    			esp_http_client_set_timeout_ms(client, 1000);
-    		}
-    		
-    		if ((err = esp_http_client_open(client, 0)) == ESP_OK)
-    		{
-	        int content_length =  esp_http_client_fetch_headers(client);
-	        buffer = malloc(content_length + 128);
-					if (buffer == NULL) {
-						ESP_LOGE(TAG, "malloc failed!");
-						esp_http_client_close(client);
-					}
-					else
-					{
-						memset(buffer, 0, (content_length + 128));
-						int read_len, status_code_, content_length_;
-						
-            read_len = esp_http_client_read(client, buffer, content_length);
-            status_code_ = esp_http_client_get_status_code(client);
-            content_length_ = esp_http_client_get_content_length(client);
-            if ((read_len <= 0) || (status_code_ <= 0) || (content_length_ <= 0)) {
-                ESP_LOGE(TAG, "Error read data");
-            }
-            else
-            {
-            	pc_analysis_json(buffer);
-            }
-		        
-		        ESP_LOGI(TAG, "HTTP Stream reader Status = %d, content_length = %d, read_len = %d, url:%s",
-		                        status_code_,
-		                        content_length_,
-		                        read_len,
-		                        URL);
-
-		        free(buffer);
-
-		        esp_http_client_close(client);    						
-					}
-
-
-					if (is_scan_mode == true)
-					{
-						update_ip_address_to_flash(ip0, ip1, ip2, ip3);
-						is_scan_mode = false;
-						openerr_count = 0;
-					}
-    		}
-    		else
-    		{
-    			esp_http_client_close(client);
-    			ESP_LOGE(TAG, "Failed to open HTTP connection: %s,url:%s", esp_err_to_name(err),URL);
-    			if (openerr_count < 5)
-    			{
-    				openerr_count++;
-    				if (openerr_count >=5)
-    				{
-    					ip0 = ip1 = ip2 = ip3 = port = 0;
-    					sscanf(URL,"http://%d.%d.%d.%d:%d/data.json",&ip0,&ip1,&ip2,&ip3,&port);
-    					is_scan_mode = true;
-    				}
-    			}
-    		}
-    	}
-    	else
-    	{
-    		ESP_LOGE(TAG, "esp_http_client_init error");
-    	}
-
-    	esp_http_client_cleanup(client);
-    	vTaskDelay(pdMS_TO_TICKS((is_scan_mode == true)?(100):(1000)));
-
-    	if (is_scan_mode == true)
-    	{
-    		memset(URL, 0, sizeof(URL));
-    		ip3++;
-    		if (ip3 > 255)
-    		{
-    			ip3 = 0;
-    		}
-    		sprintf(URL, "http://%d.%d.%d.%d:%d/data.json", ip0,ip1,ip2,ip3,port);
-    	}
-    }
-    
-    vTaskDelete(NULL);
-}
 
 
 /**
@@ -744,17 +543,7 @@ void wifi_init_sta(void)
     cJSON *json_ip_address = cJSON_GetObjectItem(json_root, "ip_address");
     cJSON *json_port = cJSON_GetObjectItem(json_root, "port");
 
-    ESP_LOGI(TAG, "wifi ssid:%s, wifi pass:%s, ip:%s, port:%s", 
-            json_wifi_ssid->valuestring,
-            json_wifi_pass->valuestring,
-            json_ip_address->valuestring, json_port->valuestring);
-    memset(URL, 0, sizeof(URL));
-    strcat(URL, "http://");//"http://192.168.31.99:8085/data.json";
-    strcat(URL, json_ip_address->valuestring);
-    strcat(URL, ":");
-    strcat(URL, json_port->valuestring);
-    strcat(URL, "/data.json");
-    ESP_LOGI(TAG, "url:%s", URL);
+    ESP_LOGI(TAG, "json data:%s", cJSON_Print(json_root));
 
     /*--------------------------step3:连接wifi--------------------------------------*/
 
@@ -815,7 +604,6 @@ void wifi_init_sta(void)
     {
         ESP_LOGI(TAG, "connected to ap SSID:%s password:%s",
                  wifi_config.sta.ssid, wifi_config.sta.password);
-        xSemaphoreGive(xHttpSemaphore); /*向http发送信号，告诉它已连接上wifi，可以开始http client任务了*/
     }
     else if (bits & WIFI_FAIL_BIT)
     {
@@ -1167,131 +955,6 @@ static void create_gui_task_loading(void)
 static void create_gui_task_main(void)
 {
 
-}
-
-
-/**
- * @brief 
- * 
- */
-static void gui_task_main(void *pvParameters)
-{
-    int cpu_temper = 0;
-    int ram_load = 0;
-    int cpu_load = 0;
-    int gpu_load = 0;
-    int counter_lmeter, counter_info;
-
-    /* 设置表盘样式 */
-    static lv_style_t style_cpu_lmeter;
-    lv_style_init(&style_cpu_lmeter);
-    lv_style_set_line_width(&style_cpu_lmeter, LV_STATE_DEFAULT, 4);    /*设置表盘小于value的刻度宽度*/
-    lv_style_set_scale_end_line_width(&style_cpu_lmeter, LV_STATE_DEFAULT, 4);    /*设置表盘大于value的刻度宽度*/
-    lv_style_set_scale_width(&style_cpu_lmeter, LV_STATE_DEFAULT, 16);  /*设置全部刻度线的长度*/
-    lv_style_set_line_color(&style_cpu_lmeter, LV_STATE_DEFAULT, MY_COLOR_SKYBLUE);/*设置刻度小于value部分刻度线的颜色*/
-    lv_style_set_scale_end_color(&style_cpu_lmeter, LV_STATE_DEFAULT, MY_COLOR_BACKBLACK);/*设置刻度大于value部分刻度线的颜色*/
-    
-    /* 创建CPU 表盘 */
-    lv_obj_t *lmeter_cpu = lv_linemeter_create(lv_scr_act(), NULL);
-    lv_linemeter_set_range(lmeter_cpu, 0, 100);                   /*Set the range*/
-    lv_linemeter_set_value(lmeter_cpu, 80);                       /*Set the current value*/
-    lv_linemeter_set_scale(lmeter_cpu, 280, 100);                  /*Set the angle and number of lines*/
-    lv_obj_set_size(lmeter_cpu, 120, 120);
-    lv_obj_align(lmeter_cpu, NULL, LV_ALIGN_IN_TOP_LEFT, 0, 0);
-
-    lv_obj_t *label_cpu_title = lv_label_create(lmeter_cpu, NULL);
-    lv_label_set_text(label_cpu_title, "CPU");
-    lv_obj_align(label_cpu_title, NULL, LV_ALIGN_IN_BOTTOM_MID, 0, -16);
-    
-    lv_obj_t *label_cpu_temper = lv_label_create(lmeter_cpu, NULL);
-    lv_label_set_text_fmt(label_cpu_temper, "%s", pc_get_cpu_temperature_str());
-    lv_obj_align(label_cpu_temper, NULL, LV_ALIGN_CENTER, 0, 0);
-
-    lv_obj_add_style(lmeter_cpu, LV_OBJ_PART_MAIN, &style_cpu_lmeter);
-
-    /* 创建图表 */
-    /*Create a chart*/
-    lv_obj_t * chart;
-    chart = lv_chart_create(lv_scr_act(), NULL);
-    lv_obj_set_size(chart, 240, 120);
-    lv_obj_align(chart, NULL, LV_ALIGN_IN_BOTTOM_LEFT, 0, 0);
-    lv_chart_set_type(chart, LV_CHART_TYPE_LINE);   /*Show lines and points too*/
-    lv_chart_set_div_line_count(chart, 3, 5);
-    lv_chart_set_point_count(chart, 6);
-
-    /*Add a faded are effect*/
-    lv_obj_set_style_local_bg_opa(chart, LV_CHART_PART_SERIES, LV_STATE_DEFAULT, LV_OPA_50); /*Max. opa.*/
-    lv_obj_set_style_local_bg_grad_dir(chart, LV_CHART_PART_SERIES, LV_STATE_DEFAULT, LV_GRAD_DIR_VER);
-    lv_obj_set_style_local_bg_main_stop(chart, LV_CHART_PART_SERIES, LV_STATE_DEFAULT, 255);    /*Max opa on the top*/
-    lv_obj_set_style_local_bg_grad_stop(chart, LV_CHART_PART_SERIES, LV_STATE_DEFAULT, 0);      /*Transparent on the bottom*/
-
-    /*Add two data series*/
-    lv_chart_series_t * chart_ser_cpu_load = lv_chart_add_series(chart, LV_COLOR_RED);
-    lv_chart_series_t * chart_ser_gpu_load = lv_chart_add_series(chart, LV_COLOR_GREEN);
-    lv_chart_series_t * chart_ser_ram_load = lv_chart_add_series(chart, LV_COLOR_BLUE);
-
-    lv_obj_t *label_chart = lv_label_create(chart, NULL);
-    lv_obj_align(label_chart, NULL, LV_ALIGN_IN_TOP_LEFT, 0 ,0);
-    lv_obj_set_width(label_chart, lv_obj_get_width(chart));
-    lv_label_set_recolor(label_chart, true);
-    lv_label_set_text_fmt(label_chart, "#ff0000 处理器:%s#\n#00ff00 显卡:%s#\n#0000ff 内存:%s",
-    											pc_get_cpu_load_str(), pc_get_gpu_load_str(), pc_get_ram_load_str());
-
-		/* 创建文本，显示pc详细信息 */
-    lv_obj_t *label_pc_info = lv_label_create(lv_scr_act(), NULL);
-    lv_obj_set_pos(label_pc_info, 120, 100);
-		lv_label_set_long_mode(label_pc_info, LV_LABEL_LONG_SROLL_CIRC);
-		lv_obj_set_size(label_pc_info, 120, 16);
-		lv_label_set_recolor(label_pc_info, true);
-    lv_label_set_text_fmt(label_pc_info, "电脑:%s #0000ff 主板:%s ##ff0000 处理器:%s ##00ff00 显卡:%s #",
-		    									pc_get_name_str(), pc_get_mainboard_name_str(), pc_get_cpu_name_str(), pc_get_gpu_name_str());
-
-		counter_info = 10000;
-		counter_lmeter = 10000;
-    while (true)
-    {
-    		if (counter_lmeter > 1)
-    		{
-    			counter_lmeter = 0;
-						/* get data */
-						cpu_temper = pc_get_cpu_temperature();
-						if (!(pc_is_cpu_temperature_unit_celsius()))
-						{
-								cpu_temper = ((cpu_temper - 32)*5)/9; 	/*表盘是满了是100，按照摄氏度来的，华氏度的话转成摄氏度: 华氏度 = 32℉ + (摄氏度 * 1.8) */
-						}
-						
-		        /* set data to gui */
-		        lv_linemeter_set_value(lmeter_cpu, cpu_temper);
-		        
-		        lv_label_set_text_fmt(label_cpu_temper, "%s", pc_get_cpu_temperature_str());
-		        
-		        lv_obj_align(label_cpu_temper, NULL, LV_ALIGN_CENTER, 0, 0);    			
-    		}
-
-    		if (counter_info > 10)
-    		{
-    			counter_info = 0;
-
-			    lv_label_set_text_fmt(label_pc_info, "电脑:%s #0000ff 主板:%s ##ff0000 处理器:%s ##00ff00 显卡:%s #",
-		    												pc_get_name_str(), pc_get_mainboard_name_str(), pc_get_cpu_name_str(), pc_get_gpu_name_str());       			
-    		}
-
-
-        ram_load = pc_get_ram_load();
-        cpu_load = pc_get_cpu_load();
-        gpu_load = pc_get_gpu_load();
-
-        lv_label_set_text_fmt(label_chart, "#ff0000 处理器:%s#\n#00ff00 显卡:%s#\n#0000ff 内存:%s",
-    													pc_get_cpu_load_str(), pc_get_gpu_load_str(), pc_get_ram_load_str());
-                             
-        lv_chart_set_next(chart, chart_ser_cpu_load, cpu_load);
-        lv_chart_set_next(chart, chart_ser_gpu_load, gpu_load);
-        lv_chart_set_next(chart, chart_ser_ram_load, ram_load);
-
-        vTaskDelay(pdMS_TO_TICKS(1000));
-        counter_lmeter++;
-        counter_info++;
-    }
 }
 
 

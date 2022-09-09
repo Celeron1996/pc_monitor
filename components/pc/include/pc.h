@@ -19,5 +19,8 @@ char *pc_get_cpu_name_str(void);
 char *pc_get_gpu_name_str(void);
 char *pc_get_name_str(void);
 char *pc_get_mainboard_name_str(void);
+void pc_task(void *pvParameters);
+void pc_gui_refresh(void);
+int pc_refresh_url(void);
 
 #endif
