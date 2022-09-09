@@ -753,13 +753,13 @@ void pc_task(void *pvParameters)
 
 
 
-
+extern const size_t JSON_SIZE;
 int pc_refresh_url(void)
 {
 		/*--------------------step1:首先，从nvs中获取json--------------*/
 		esp_err_t err;
 		char *buffer;
-		size_t length = 4*1024;
+		size_t length = JSON_SIZE;
 		nvs_handle_t nvs_handle;
 
 		/*打开nvs*/

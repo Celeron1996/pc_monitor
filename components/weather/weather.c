@@ -395,13 +395,13 @@ void weather_gui_refresh(void)
 
 
 
-
+extern const size_t JSON_SIZE;
 static int weather_refresh_url(void)
 {
 		/*--------------------step1:首先，从nvs中获取json--------------*/
 		esp_err_t err;
 		char *buffer;
-		size_t length = 8*1024;
+		size_t length = JSON_SIZE;
 		nvs_handle_t nvs_handle;
 
 		/*打开nvs*/

@@ -119,6 +119,7 @@ const char *NVS_KEY_JSON = "json";
 
 static const char *TAG = "pc_monitor";
 
+const size_t JSON_SIZE = 8*1024;	/*接受配置json的buffer最大容量*/
 
 /**
  * @brief 应用主函数
@@ -444,7 +445,7 @@ void wifi_init_sta(void)
     /*--------------------step1:首先，从nvs中获取json--------------*/
     esp_err_t err;
     char *buffer;
-    size_t length = 8*1024;
+    size_t length = JSON_SIZE;
     nvs_handle_t nvs_handle;
 
     /*打开nvs*/
@@ -591,7 +592,7 @@ void wifi_init_sta(void)
  */
 static void udp_server_task(void *pvParameters)
 {
-    char rx_buffer[8*1024];
+    char rx_buffer[JSON_SIZE];
     char addr_str[128];
     int addr_family = (int)pvParameters;
     int ip_protocol = 0;
