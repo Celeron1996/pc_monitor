@@ -143,7 +143,7 @@ void app_main(void)
 
     xTaskCreate(guiTask, "guiTask", 4*1024, (void*)NULL, 0, NULL);
 
-    vTaskDelay(pdMS_TO_TICKS(2000));
+    vTaskDelay(pdMS_TO_TICKS(4000));
 
     xTaskCreate(wifi_task, "wifi_task", 4*1024, (void*)NULL, 0, NULL);
 
@@ -777,4 +777,6 @@ static void wifi_waiting_connect(const char *wifi_ssid)
 
   lv_obj_del(label);
   lv_obj_del(bar1);
+
+  vTaskDelay(pdMS_TO_TICKS(500));
 }
