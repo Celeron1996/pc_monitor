@@ -174,8 +174,8 @@ void sntp_task(void *pvParameters)
 
 	lv_obj_t *label_time = lv_label_create(lv_scr_act(), NULL);
 	lv_label_set_long_mode(label_time, LV_LABEL_LONG_SROLL_CIRC);
-	lv_obj_set_pos(label_time, 104, 70);
-	lv_obj_set_width(label_time, 128);	
+	lv_obj_set_pos(label_time, 120, 68);
+	lv_obj_set_width(label_time, 120);	
 
 	while (true)
 	{

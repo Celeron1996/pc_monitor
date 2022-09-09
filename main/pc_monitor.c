@@ -1196,8 +1196,8 @@ static void gui_task_main(void *pvParameters)
     lv_linemeter_set_range(lmeter_cpu, 0, 100);                   /*Set the range*/
     lv_linemeter_set_value(lmeter_cpu, 80);                       /*Set the current value*/
     lv_linemeter_set_scale(lmeter_cpu, 280, 100);                  /*Set the angle and number of lines*/
-    lv_obj_set_size(lmeter_cpu, 104, 104);
-    lv_obj_align(lmeter_cpu, NULL, LV_ALIGN_IN_TOP_LEFT, 0, 16);
+    lv_obj_set_size(lmeter_cpu, 120, 120);
+    lv_obj_align(lmeter_cpu, NULL, LV_ALIGN_IN_TOP_LEFT, 0, 0);
 
     lv_obj_t *label_cpu_title = lv_label_create(lmeter_cpu, NULL);
     lv_label_set_text(label_cpu_title, "CPU");
@@ -1231,7 +1231,6 @@ static void gui_task_main(void *pvParameters)
     lv_chart_series_t * chart_ser_ram_load = lv_chart_add_series(chart, LV_COLOR_BLUE);
 
     lv_obj_t *label_chart = lv_label_create(chart, NULL);
-    //lv_label_set_long_mode(label_chart, LV_LABEL_LONG_SROLL_CIRC);
     lv_obj_align(label_chart, NULL, LV_ALIGN_IN_TOP_LEFT, 0 ,0);
     lv_obj_set_width(label_chart, lv_obj_get_width(chart));
     lv_label_set_recolor(label_chart, true);
@@ -1240,9 +1239,9 @@ static void gui_task_main(void *pvParameters)
 
 		/* 创建文本，显示pc详细信息 */
     lv_obj_t *label_pc_info = lv_label_create(lv_scr_act(), NULL);
-    lv_obj_align(label_pc_info, lv_scr_act(), LV_ALIGN_IN_TOP_LEFT, 0, 0);
+    lv_obj_set_pos(label_pc_info, 120, 100);
 		lv_label_set_long_mode(label_pc_info, LV_LABEL_LONG_SROLL_CIRC);
-		lv_obj_set_size(label_pc_info, 240, 16);
+		lv_obj_set_size(label_pc_info, 120, 16);
 		lv_label_set_recolor(label_pc_info, true);
     lv_label_set_text_fmt(label_pc_info, "电脑:%s #0000ff 主板:%s ##ff0000 处理器:%s ##00ff00 显卡:%s #",
 		    									pc_get_name_str(), pc_get_mainboard_name_str(), pc_get_cpu_name_str(), pc_get_gpu_name_str());

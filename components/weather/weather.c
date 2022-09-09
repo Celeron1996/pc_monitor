@@ -120,7 +120,7 @@ void weather_task(void *pvParameters)
     }
 
     weather_image = lv_img_create(lv_scr_act(), NULL);
-    lv_obj_set_pos(weather_image, 104, 16);
+    lv_obj_set_pos(weather_image, 120, 8);
     lv_img_set_auto_size(weather_image, true);
     
     weather_label = lv_label_create(lv_scr_act(), NULL);
