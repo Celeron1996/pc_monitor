@@ -80,11 +80,11 @@ static int _gpu_load = 0;
 static bool _cpu_temperature_unit_celsius = true;
 static bool _gpu_temperature_unit_celsius = true;
 
-extern const char *NVS_NAME_STR;
-extern const char *NVS_ACTIVE_STR;
-extern const char *NVS_TRUE_STR;
-extern const char *NVS_FALSE_STR;
-extern const char *NVS_JSON_STR; 
+extern const char *NVS_HANDLER;
+extern const char *NVS_KEY_ACTIVE;
+extern const char *NVS_VALUE_TRUE;
+extern const char *NVS_VALUE_FALSE;
+extern const char *NVS_KEY_JSON; 
 
 /**
  * @brief 初始化
@@ -756,23 +756,31 @@ void pc_task(void *pvParameters)
 
 int pc_refresh_url(void)
 {
-		/*--------------------step1:首先，从nvs中获取wifi名称、密码，ip地址等--------------*/
+		/*--------------------step1:首先，从nvs中获取json--------------*/
 		esp_err_t err;
-		char buffer[128];
-		size_t length;
+		char *buffer;
+		size_t length = 4*1024;
 		nvs_handle_t nvs_handle;
 
 		/*打开nvs*/
-		err = nvs_open(NVS_NAME_STR, NVS_READWRITE, &nvs_handle);
+		err = nvs_open(NVS_HANDLER, NVS_READWRITE, &nvs_handle);
 		if(err != ESP_OK)
 		{
 				ESP_LOGE(TAG, "nvs_open error, code = %d", err);
-				while(1);
+				return -1;
 		}
 
+		buffer = (char *)malloc(length);
+		if (buffer == NULL)
+		{
+			ESP_LOGE(TAG, "pc_refresh_url malloc error");
+			nvs_close(nvs_handle);
+			return -1;
+		}
+		memset(buffer, 0, length);
+
 		/*获取json*/
-		length = sizeof(buffer);
-		err = nvs_get_str(nvs_handle, NVS_JSON_STR, buffer, &length);
+		err = nvs_get_str(nvs_handle, NVS_KEY_JSON, buffer, &length);
 		if(err == ESP_OK)
 		{
 				ESP_LOGI(TAG, "get nvs wifi json success! json = %s", buffer);
@@ -781,6 +789,7 @@ int pc_refresh_url(void)
 		{
 				ESP_LOGE(TAG, "nvs active error, code = %d", err);
 				nvs_close(nvs_handle);
+				free(buffer);
 				return -1;
 
 		}
@@ -791,6 +800,7 @@ int pc_refresh_url(void)
 		{
 			ESP_LOGE(TAG, "cJSON_Parse  error!");
 			nvs_close(nvs_handle);
+			free(buffer);
 			return -1;
 		}
 
@@ -801,6 +811,7 @@ int pc_refresh_url(void)
 			ESP_LOGE(TAG, "cJSON_GetObjectItem  error!");
 			cJSON_Delete(json_root);
 			nvs_close(nvs_handle);
+			free(buffer);
 			return -1;			
 		}
 
@@ -814,6 +825,7 @@ int pc_refresh_url(void)
 
 		nvs_close(nvs_handle);
 		cJSON_Delete(json_root);
+		free(buffer);
 
 		return 1;
 }
@@ -833,7 +845,7 @@ static void update_ip_address_to_flash(int ip0, int ip1, int ip2, int ip3)
 		char ip_str[] = "255.255.255.255";
 
 		/*打开nvs*/
-		err = nvs_open(NVS_NAME_STR, NVS_READWRITE, &nvs_handle);
+		err = nvs_open(NVS_HANDLER, NVS_READWRITE, &nvs_handle);
 		if(err != ESP_OK)
 		{
 				ESP_LOGE(TAG, "nvs_open error, code = %d", err);
@@ -843,7 +855,7 @@ static void update_ip_address_to_flash(int ip0, int ip1, int ip2, int ip3)
 		/*获取json*/
 		length = sizeof(buffer);
 		memset(buffer, 0, sizeof(buffer));
-		err = nvs_get_str(nvs_handle, NVS_JSON_STR, buffer, &length);
+		err = nvs_get_str(nvs_handle, NVS_KEY_JSON, buffer, &length);
 		if(err == ESP_OK)
 		{
 				ESP_LOGI(TAG, "get nvs wifi json success! json = %s", buffer);
@@ -861,7 +873,7 @@ static void update_ip_address_to_flash(int ip0, int ip1, int ip2, int ip3)
 		sprintf(ip_str,"%d.%d.%d.%d",ip0,ip1,ip2,ip3);
 		cJSON_SetValuestring(cJSON_GetObjectItem(json_root, "ip_address"), (const char *)ip_str);
 
-		err = nvs_set_str(nvs_handle, NVS_JSON_STR, cJSON_PrintUnformatted(json_root));
+		err = nvs_set_str(nvs_handle, NVS_KEY_JSON, cJSON_PrintUnformatted(json_root));
 		if (err == ESP_OK)
 		{
 			ESP_LOGI(TAG, "update json to flash success! json = %s", cJSON_PrintUnformatted(json_root));
@@ -879,7 +891,7 @@ static void update_ip_address_to_flash(int ip0, int ip1, int ip2, int ip3)
 		return;
 		
 		flag_err:
-		nvs_set_str(nvs_handle, NVS_ACTIVE_STR, NVS_FALSE_STR);
+		nvs_set_str(nvs_handle, NVS_KEY_ACTIVE, NVS_VALUE_FALSE);
 		nvs_commit(nvs_handle);
 		nvs_close(nvs_handle);
 		ESP_LOGE(TAG, "update_ip_address_to_flash error");

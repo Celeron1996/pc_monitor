@@ -9,19 +9,31 @@
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "esp_freertos_hooks.h"
+#include "freertos/semphr.h"
+#include "freertos/event_groups.h"
+
 #include "esp_system.h"
+#include "driver/spi_master.h"
+#include "driver/gpio.h"
+#include "esp_log.h"
+#include "esp_err.h"
+
+#include "esp_crt_bundle.h"
+#include "esp_http_client.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
-#include "esp_log.h"
+#include "esp_netif.h"
+#include "esp_tls.h"
+#include "nvs_flash.h"
 
 #include "lwip/err.h"
-#include "lwip/sockets.h"
 #include "lwip/sys.h"
-#include "lwip/netdb.h"
-#include "lwip/dns.h"
+#include "lwip/sockets.h"
+#include <lwip/netdb.h>
+
 
 #include "cJSON.h"
-#include "string.h"
 
 #include "weather.h"
 
@@ -33,13 +45,19 @@
 #endif
 #include "lvgl_helpers.h"
 
+extern const char *NVS_HANDLER;
+extern const char *NVS_KEY_ACTIVE;
+extern const char *NVS_VALUE_TRUE;
+extern const char *NVS_VALUE_FALSE;
+extern const char *NVS_KEY_JSON; 
 
 static void weather_analysis_json(void *pJson);
+static int weather_refresh_url(void);
 
 
 /* seniverse api arg */
 #define PRIVATE_KEY	"key=S9wcdovBWmKYunRle"
-#define CITY_NAME	"location=huizhou"
+#define CITY_NAME	"location=beijing"
 #define LANGUAGE	"language=zh-Hans"
 #define UNIT		"unit=c"
 
@@ -50,7 +68,7 @@ static void weather_analysis_json(void *pJson);
 
 static const char *TAG = "weather";
 
-static const char *REQUEST = "GET " WEB_PATH " HTTP/1.0\r\n"
+static char REQUEST[256] = "GET " WEB_PATH " HTTP/1.0\r\n"
     "Host: "WEB_SERVER":"WEB_PORT"\r\n"
     "User-Agent: esp-idf/1.0 esp32\r\n"
     "\r\n";
@@ -111,6 +129,8 @@ void weather_task(void *pvParameters)
     weather_label = lv_label_create(lv_scr_act(), NULL);
     lv_obj_align(weather_label, weather_image, LV_ALIGN_IN_RIGHT_MID, 8, -8);
     lv_label_set_recolor(weather_label, true);
+
+    weather_refresh_url();
 
     vTaskDelay(pdMS_TO_TICKS(5000));
 
@@ -365,4 +385,83 @@ void weather_gui_refresh(void)
   lv_label_set_text_fmt(weather_label, "#ff0000 %s#\n#0000ff %s %s°C#",
   											weather_get_city(), weather_get_text(), weather_get_temperature());
 }
+
+
+
+
+static int weather_refresh_url(void)
+{
+		/*--------------------step1:首先，从nvs中获取json--------------*/
+		esp_err_t err;
+		char *buffer;
+		size_t length = 4*1024;
+		nvs_handle_t nvs_handle;
+
+		/*打开nvs*/
+		err = nvs_open(NVS_HANDLER, NVS_READWRITE, &nvs_handle);
+		if(err != ESP_OK)
+		{
+				ESP_LOGE(TAG, "nvs_open error, code = %d", err);
+				return -1;
+		}
+
+		buffer = (char *)malloc(length);
+		if (buffer == NULL)
+		{
+			ESP_LOGE(TAG, "weather_refresh_url malloc error");
+			nvs_close(nvs_handle);
+			return -1;
+		}
+		memset(buffer, 0, length);
+		
+		/*获取json*/
+		err = nvs_get_str(nvs_handle, NVS_KEY_JSON, buffer, &length);
+		if(err == ESP_OK)
+		{
+				ESP_LOGI(TAG, "get nvs wifi json success! json = %s", buffer);
+		}
+		else
+		{
+				ESP_LOGE(TAG, "nvs active error, code = %d", err);
+				nvs_close(nvs_handle);
+				free(buffer);
+				return -1;
+
+		}
+
+		/*------------------------step2:获取成功，解析json----------------------------------*/
+		cJSON *json_root = cJSON_Parse(buffer);
+		if (json_root == NULL)
+		{
+			ESP_LOGE(TAG, "cJSON_Parse	error!");
+			nvs_close(nvs_handle);
+			free(buffer);
+			return -1;
+		}
+
+		cJSON *json_city = cJSON_GetObjectItem(json_root, "city");
+		cJSON *json_private_key = cJSON_GetObjectItem(json_root, "private_key");
+		if (json_city == NULL || json_private_key == NULL)
+		{
+			ESP_LOGE(TAG, "cJSON_GetObjectItem	error!");
+			cJSON_Delete(json_root);
+			nvs_close(nvs_handle);
+			free(buffer);
+			return -1;			
+		}
+
+		memset(REQUEST, 0, sizeof(REQUEST));
+		sprintf(REQUEST, "GET /v3/weather/now.json?%s&%s&%s&%s HTTP/1.0\r\nHost: %s:%s\r\nUser-Agent: esp-idf/1.0 esp32\r\n\r\n",
+											json_private_key->valuestring, json_city->valuestring, LANGUAGE, UNIT, WEB_SERVER, WEB_PORT);
+		
+		ESP_LOGI(TAG, "url:%s", REQUEST);
+
+		nvs_close(nvs_handle);
+		cJSON_Delete(json_root);
+		free(buffer);
+		
+		return 1;
+}
+
+
 

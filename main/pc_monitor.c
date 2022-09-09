@@ -103,11 +103,11 @@ static void event_handler(void* arg, esp_event_base_t event_base, int32_t event_
 /*---------------------------------- wifi (end) ----------------------------*/
 
 /*存储非易失性存储的字符串*/
-const char *NVS_NAME_STR = "config";
-const char *NVS_ACTIVE_STR = "active";
-const char *NVS_TRUE_STR = "true";
-const char *NVS_FALSE_STR = "false";
-const char *NVS_JSON_STR = "json";
+const char *NVS_HANDLER = "config";
+const char *NVS_KEY_ACTIVE = "active";
+const char *NVS_VALUE_TRUE = "true";
+const char *NVS_VALUE_FALSE = "false";
+const char *NVS_KEY_JSON = "json";
 
 static const char *TAG = "pc_monitor";
 
@@ -293,11 +293,11 @@ void wifi_task(void *pvParameters)
     }
 
     length = sizeof(buffer);
-    err = nvs_get_str(nvs_handle, NVS_ACTIVE_STR, buffer, &length);
+    err = nvs_get_str(nvs_handle, NVS_KEY_ACTIVE, buffer, &length);
     nvs_close(nvs_handle);
     if(err == ESP_OK)
     {
-        if(memcmp(buffer, NVS_TRUE_STR, strlen(NVS_TRUE_STR)) == 0)
+        if(memcmp(buffer, NVS_VALUE_TRUE, strlen(NVS_VALUE_TRUE)) == 0)
         {
             /*存储的wifi是正确的，可以使用*/
             wifi_connect();
@@ -439,25 +439,31 @@ void wifi_init_softap(void)
  */
 void wifi_init_sta(void)
 {
-    /*--------------------step1:首先，从nvs中获取wifi名称、密码，ip地址等--------------*/
+    /*--------------------step1:首先，从nvs中获取json--------------*/
     esp_err_t err;
-    char buffer[128];
-    size_t length;
+    char *buffer;
+    size_t length = 4*1024;
     nvs_handle_t nvs_handle;
 
-
-
     /*打开nvs*/
-    err = nvs_open(NVS_NAME_STR, NVS_READWRITE, &nvs_handle);
+    err = nvs_open(NVS_HANDLER, NVS_READWRITE, &nvs_handle);
     if(err != ESP_OK)
     {
         ESP_LOGE(TAG, "nvs_open error, code = %d", err);
         while(1);
     }
+    
+		buffer = (char *)malloc(length);
+		if (buffer == NULL)
+		{
+			ESP_LOGE(TAG, "wifi_init_sta malloc error");
+			nvs_close(nvs_handle);
+			return ;
+		}
+		memset(buffer, 0, length);
 
     /*获取json*/
-    length = sizeof(buffer);
-    err = nvs_get_str(nvs_handle, NVS_JSON_STR, buffer, &length);
+    err = nvs_get_str(nvs_handle, NVS_KEY_JSON, buffer, &length);
     if(err == ESP_OK)
     {
         ESP_LOGI(TAG, "get nvs wifi json success! json = %s", buffer);
@@ -556,12 +562,15 @@ void wifi_init_sta(void)
 
     cJSON_Delete(json_root);
 
+    free(buffer);
+
     return;
     
     flag_err:
-    nvs_set_str(nvs_handle, NVS_ACTIVE_STR, NVS_FALSE_STR);
+    nvs_set_str(nvs_handle, NVS_KEY_ACTIVE, NVS_VALUE_FALSE);
     nvs_commit(nvs_handle);
     nvs_close(nvs_handle);
+    free(buffer);
     ESP_LOGE(TAG, "wifi connect error, will be reboot");
     vTaskDelay(4000 / portTICK_RATE_MS);
     esp_restart();
@@ -652,11 +661,11 @@ static void udp_server_task(void *pvParameters)
                 if (err != ESP_OK)
                     ESP_LOGE(TAG, "nvs open err = %d", err);
 
-                err = nvs_set_str(nvs_handle, NVS_JSON_STR, rx_buffer);
+                err = nvs_set_str(nvs_handle, NVS_KEY_JSON, rx_buffer);
                 if (err != ESP_OK)
                     ESP_LOGE(TAG, "nvs set json err = %d", err);
 
-                err = nvs_set_str(nvs_handle, NVS_ACTIVE_STR, NVS_TRUE_STR);
+                err = nvs_set_str(nvs_handle, NVS_KEY_ACTIVE, NVS_VALUE_TRUE);
                 if(err != ESP_OK)
                     ESP_LOGE(TAG, "nvs set active err = %d", err);
                 nvs_commit(nvs_handle);
@@ -687,9 +696,9 @@ void wifi_reset(void)
 {
     nvs_handle_t nvs_handle;
 
-    nvs_open(NVS_NAME_STR, NVS_READWRITE, &nvs_handle);
+    nvs_open(NVS_HANDLER, NVS_READWRITE, &nvs_handle);
 
-    nvs_set_str(nvs_handle, NVS_ACTIVE_STR, NVS_FALSE_STR);
+    nvs_set_str(nvs_handle, NVS_KEY_ACTIVE, NVS_VALUE_FALSE);
 
     nvs_commit(nvs_handle);
 
