@@ -396,6 +396,7 @@ static int weather_refresh_url(void)
 		char *buffer;
 		size_t length = 4*1024;
 		nvs_handle_t nvs_handle;
+		ESP_LOGI(TAG, "%s,%d,%s", __FILE__, __LINE__, __FUNCTION__);
 
 		/*打开nvs*/
 		err = nvs_open(NVS_HANDLER, NVS_READWRITE, &nvs_handle);
@@ -404,6 +405,7 @@ static int weather_refresh_url(void)
 				ESP_LOGE(TAG, "nvs_open error, code = %d", err);
 				return -1;
 		}
+		ESP_LOGI(TAG, "%s,%d,%s", __FILE__, __LINE__, __FUNCTION__);
 
 		buffer = (char *)malloc(length);
 		if (buffer == NULL)
@@ -413,7 +415,7 @@ static int weather_refresh_url(void)
 			return -1;
 		}
 		memset(buffer, 0, length);
-		
+		ESP_LOGI(TAG, "%s,%d,%s", __FILE__, __LINE__, __FUNCTION__);
 		/*获取json*/
 		err = nvs_get_str(nvs_handle, NVS_KEY_JSON, buffer, &length);
 		if(err == ESP_OK)
@@ -428,6 +430,7 @@ static int weather_refresh_url(void)
 				return -1;
 
 		}
+		ESP_LOGI(TAG, "%s,%d,%s", __FILE__, __LINE__, __FUNCTION__);
 
 		/*------------------------step2:获取成功，解析json----------------------------------*/
 		cJSON *json_root = cJSON_Parse(buffer);
@@ -438,6 +441,7 @@ static int weather_refresh_url(void)
 			free(buffer);
 			return -1;
 		}
+		ESP_LOGI(TAG, "%s,%d,%s", __FILE__, __LINE__, __FUNCTION__);
 
 		cJSON *json_city = cJSON_GetObjectItem(json_root, "city");
 		cJSON *json_private_key = cJSON_GetObjectItem(json_root, "private_key");
@@ -449,6 +453,7 @@ static int weather_refresh_url(void)
 			free(buffer);
 			return -1;			
 		}
+		ESP_LOGI(TAG, "%s,%d,%s", __FILE__, __LINE__, __FUNCTION__);
 
 		memset(REQUEST, 0, sizeof(REQUEST));
 		sprintf(REQUEST, "GET /v3/weather/now.json?%s&%s&%s&%s HTTP/1.0\r\nHost: %s:%s\r\nUser-Agent: esp-idf/1.0 esp32\r\n\r\n",
@@ -459,7 +464,7 @@ static int weather_refresh_url(void)
 		nvs_close(nvs_handle);
 		cJSON_Delete(json_root);
 		free(buffer);
-		
+		ESP_LOGI(TAG, "%s,%d,%s", __FILE__, __LINE__, __FUNCTION__);
 		return 1;
 }
 

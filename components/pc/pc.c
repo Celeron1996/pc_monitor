@@ -585,7 +585,8 @@ void pc_task(void *pvParameters)
     lv_obj_t *label_cpu_temper = lv_label_create(lmeter_cpu, NULL);
     lv_label_set_text_fmt(label_cpu_temper, "%s", pc_get_cpu_temperature_str());
     lv_obj_align(label_cpu_temper, NULL, LV_ALIGN_CENTER, 0, 0);
-
+		lv_obj_set_auto_realign(label_cpu_temper, true);
+		
     lv_obj_add_style(lmeter_cpu, LV_OBJ_PART_MAIN, &style_cpu_lmeter);
 
     /* 创建图表 */
@@ -671,8 +672,7 @@ void pc_task(void *pvParameters)
 						  /* set data to gui */
 						  lv_linemeter_set_value(lmeter_cpu, cpu_temper);
 						  
-						  lv_label_set_text_fmt(label_cpu_temper, "%s", pc_get_cpu_temperature_str());
-						  lv_obj_align(label_cpu_temper, NULL, LV_ALIGN_CENTER, 0, 0);    			
+						  lv_label_set_text_fmt(label_cpu_temper, "%s", pc_get_cpu_temperature_str());  			
 
 							if (pc_info_counter > 10)
 							{

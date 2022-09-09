@@ -66,6 +66,8 @@
 static void lv_tick_task(void *arg);
 static void guiTask(void *pvParameter);
 static void reboot_task(void *pvParameters);
+static void wifi_waiting_connect(const char *wifi_ssid);
+void wifi_data_reset(void);
 
 
 /**
@@ -83,10 +85,16 @@ SemaphoreHandle_t xGuiSemaphore;
 #define ESP_AP_WIFI_CHANNEL   1             /*wifi 通道数量*/
 #define ESP_AP_MAX_STA_COUNT  1             /*wifi 处于ap模式时，最大可连接数量*/
 
-static EventGroupHandle_t s_wifi_event_group;   /*标志wifi各种事件*/
-#define WIFI_CONNECTED_BIT BIT0     /*连接 ap 成功事件标志位*/
-#define WIFI_FAIL_BIT      BIT1     /*连接失败事件标志位*/
-#define WIFI_AP_OK_BIT     BIT2     /*wifi ap 模式创建成功事件标志位*/
+static EventGroupHandle_t task_event_group;   /*标志各种事件*/
+#define WIFI_CONNECTED_BIT 						BIT0     /*连接 ap 成功事件标志位*/
+#define WIFI_FAIL_BIT      						BIT1     /*连接失败事件标志位*/
+#define WIFI_AP_OK_BIT     						BIT2     /*wifi ap 模式创建成功事件标志位*/
+#define WIFI_CONNECTION_START_BIT			BIT3	/*开始连接*/
+#define WIFI_DISCONNECTED_BIT					BIT4	/*断开连接*/
+#define WIFI_AP_STADISCONNECTED_BIT		BIT5	/*设备断开热点*/
+#define WIFI_AP_STACONNECTED_BIT			BIT6	/*设备加入热点*/
+#define WIFI_INIT_OK_BIT							BIT8	/*WIFI任务处理完成*/
+
 
 #define ESP_STA_MAXIMUM_RETRY  16  /*wifi重连次数*/
 static int s_retry_num = 0; /*用于记录重连次数*/
@@ -128,23 +136,22 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
-    s_wifi_event_group = xEventGroupCreate();   /*事件标记组，等待连接上wifi或失败的事件*/
+    task_event_group = xEventGroupCreate();   /*事件标记组，等待连接上wifi或失败的事件*/
 
 		button_init();
 
     xTaskCreate(guiTask, "guiTask", 4*1024, (void*)NULL, 0, NULL);
 
-    vTaskDelay(pdMS_TO_TICKS(3000));
+    vTaskDelay(pdMS_TO_TICKS(2000));
 
     xTaskCreate(wifi_task, "wifi_task", 4*1024, (void*)NULL, 0, NULL);
-    
-    xEventGroupWaitBits(s_wifi_event_group,
-            WIFI_CONNECTED_BIT,
-            pdFALSE,
-            pdFALSE,
-            portMAX_DELAY);
-    vEventGroupDelete(s_wifi_event_group);
 
+	  xEventGroupWaitBits(task_event_group,
+	          WIFI_INIT_OK_BIT,
+	          pdFALSE,
+	          pdTRUE,
+	          portMAX_DELAY);    
+    
 		//xTaskCreate(watchdog_task, "watchdog_task", 1*1024, (void*)NULL, 0, NULL);
 		
     xTaskCreate(pc_task, "pc_task", 6*1024, (void*)NULL, 1, NULL);
@@ -326,12 +333,12 @@ void wifi_config(void)
     wifi_init_softap();
 
     //vTaskDelay(500 / portTICK_RATE_MS);
-    xEventGroupWaitBits(s_wifi_event_group,
+    xEventGroupWaitBits(task_event_group,
             WIFI_AP_OK_BIT,
             pdFALSE,
             pdFALSE,
             portMAX_DELAY);
-    xTaskCreate(udp_server_task, "udp_server", 8*1024, (void*)AF_INET, 1, NULL);
+    xTaskCreate(udp_server_task, "udp_server", 16*1024, (void*)AF_INET, 1, NULL);
 }
 
 /**
@@ -355,42 +362,37 @@ static void event_handler(void* arg, esp_event_base_t event_base,
         wifi_event_ap_staconnected_t* event = (wifi_event_ap_staconnected_t*) event_data;
         ESP_LOGI(TAG, "station "MACSTR" join, AID=%d",
                  MAC2STR(event->mac), event->aid);
+        xEventGroupSetBits(task_event_group, WIFI_AP_STACONNECTED_BIT);
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_AP_STADISCONNECTED)
     {
         wifi_event_ap_stadisconnected_t* event = (wifi_event_ap_stadisconnected_t*) event_data;
         ESP_LOGI(TAG, "station "MACSTR" leave, AID=%d",
                  MAC2STR(event->mac), event->aid);
+        xEventGroupSetBits(task_event_group, WIFI_AP_STADISCONNECTED_BIT);
     }
     else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_AP_START)
     {
         ESP_LOGI(TAG, "wifi ap start!");
-        xEventGroupSetBits(s_wifi_event_group, WIFI_AP_OK_BIT);
+        xEventGroupSetBits(task_event_group, WIFI_AP_OK_BIT);
     }
     else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
     {
+    		ESP_LOGI(TAG, "wifi connect start!");
         esp_wifi_connect();
+        xEventGroupSetBits(task_event_group, WIFI_CONNECTION_START_BIT);
     }
     else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
     {
-        // if (s_retry_num < ESP_STA_MAXIMUM_RETRY)
-        // {
-        //     esp_wifi_connect();
-        //     s_retry_num++;
-        //     ESP_LOGI(TAG, "retry to connect to the AP");
-        // }
-        // else
-        // {
-        //     xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
-        // }
         esp_wifi_connect();
         ESP_LOGI(TAG,"connect to the AP fail");
+        xEventGroupSetBits(task_event_group, WIFI_DISCONNECTED_BIT);
     }
     else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
     {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
-        ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
+        ESP_LOGI(TAG, "connect wifi success ! got ip:" IPSTR, IP2STR(&event->ip_info.ip));
         s_retry_num = 0;
-        xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+        xEventGroupSetBits(task_event_group, WIFI_CONNECTED_BIT);
     }
 }
 
@@ -442,7 +444,7 @@ void wifi_init_sta(void)
     /*--------------------step1:首先，从nvs中获取json--------------*/
     esp_err_t err;
     char *buffer;
-    size_t length = 4*1024;
+    size_t length = 8*1024;
     nvs_handle_t nvs_handle;
 
     /*打开nvs*/
@@ -478,6 +480,14 @@ void wifi_init_sta(void)
     cJSON *json_root = cJSON_Parse(buffer);
     cJSON *json_wifi_ssid = cJSON_GetObjectItem(json_root, "wifi_ssid");
     cJSON *json_wifi_pass = cJSON_GetObjectItem(json_root, "wifi_pass");
+
+    if (json_root == NULL)
+    {
+    	ESP_LOGE(TAG, "wifi JSON data error! will be reset wifi and reboot!");
+    	wifi_data_reset();
+    	vTaskDelay(pdMS_TO_TICKS(1000));
+    	esp_restart();
+    }
 
     ESP_LOGI(TAG, "json data:%s", cJSON_Print(json_root));
 
@@ -528,11 +538,13 @@ void wifi_init_sta(void)
 
     /* Waiting until either the connection is established (WIFI_CONNECTED_BIT) or connection failed for the maximum
      * number of re-tries (WIFI_FAIL_BIT). The bits are set by event_handler() (see above) */
-    EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group,
-            WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
-            pdFALSE,
-            pdFALSE,
-            portMAX_DELAY);
+    //wifi_waiting_connect((const char *)wifi_config.sta.ssid);
+	  xEventGroupWaitBits(task_event_group,
+	          WIFI_CONNECTED_BIT,
+	          pdFALSE,
+	          pdTRUE,
+	          portMAX_DELAY);    
+    EventBits_t bits = xEventGroupGetBits(task_event_group);
 
     /* xEventGroupWaitBits() returns the bits before the call returned, hence we can test which event actually
      * happened. */
@@ -564,6 +576,8 @@ void wifi_init_sta(void)
 
     free(buffer);
 
+    xEventGroupSetBits(task_event_group, WIFI_INIT_OK_BIT);
+
     return;
     
     flag_err:
@@ -582,7 +596,7 @@ void wifi_init_sta(void)
  */
 static void udp_server_task(void *pvParameters)
 {
-    char rx_buffer[128];
+    char rx_buffer[8*1024];
     char addr_str[128];
     int addr_family = (int)pvParameters;
     int ip_protocol = 0;
@@ -632,6 +646,8 @@ static void udp_server_task(void *pvParameters)
         }
         ESP_LOGI(TAG, "Socket bound, port %d", UDP_SERVER_PORT);
 
+				memset(rx_buffer, 0, sizeof(rx_buffer));
+				
         while (1) {
 
             ESP_LOGI(TAG, "Waiting for data");
@@ -692,7 +708,7 @@ static void udp_server_task(void *pvParameters)
  * @brief 将nvs的标志位清空
  * 
  */
-void wifi_reset(void)
+void wifi_data_reset(void)
 {
     nvs_handle_t nvs_handle;
 
@@ -703,6 +719,8 @@ void wifi_reset(void)
     nvs_commit(nvs_handle);
 
     nvs_close(nvs_handle);
+
+    ESP_LOGI(TAG, "wifi_data_reset");
 }
 
 static void reboot_task(void *pvParameters)
@@ -724,3 +742,43 @@ static void reboot_task(void *pvParameters)
 	}
 }
 
+
+static void wifi_waiting_connect(const char *wifi_ssid)
+{
+  lv_obj_t * bar1 = lv_bar_create(lv_scr_act(), NULL);
+  lv_obj_set_size(bar1, 200, 30);
+  lv_obj_align(bar1, NULL, LV_ALIGN_CENTER, 0, 0);
+  lv_bar_set_value(bar1, 0, LV_ANIM_OFF);
+
+  lv_obj_t * label = lv_label_create(lv_scr_act(), NULL);
+  lv_obj_align(label, NULL, LV_ALIGN_CENTER, 0, 38);
+  lv_obj_set_auto_realign(label, true);
+
+	lv_label_set_text(label, "开始连接wifi...");
+	lv_bar_set_value(bar1, 20, LV_ANIM_OFF); 
+  xEventGroupWaitBits(task_event_group,
+          WIFI_CONNECTION_START_BIT,
+          pdFALSE,
+          pdTRUE,
+          portMAX_DELAY);
+	         
+	vTaskDelay(pdMS_TO_TICKS(200));
+
+	lv_label_set_text_fmt(label, "连接至wifi:\n<%s>...", wifi_ssid);
+	lv_bar_set_value(bar1, 50, LV_ANIM_OFF); 
+  xEventGroupWaitBits(task_event_group,
+          WIFI_CONNECTED_BIT,
+          pdFALSE,
+          pdTRUE,
+          portMAX_DELAY);
+          
+	vTaskDelay(pdMS_TO_TICKS(1000));
+  
+	lv_label_set_text(label, "连接wifi成功");
+	lv_bar_set_value(bar1, 100, LV_ANIM_OFF); 
+
+  vTaskDelay(pdMS_TO_TICKS(2000));
+
+  //lv_obj_del(label);
+  //lv_obj_del(bar1);
+}
